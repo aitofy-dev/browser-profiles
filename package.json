@@ -1,0 +1,119 @@
+{
+    "name": "@aitofy/browser-profiles",
+    "version": "0.1.1",
+    "description": "Self-hosted anti-detect browser profiles. Open-source AdsPower alternative for Puppeteer & Playwright.",
+    "keywords": [
+        "antidetect",
+        "anti-detect",
+        "antidetect-browser",
+        "browser-profiles",
+        "puppeteer",
+        "playwright",
+        "automation",
+        "multi-account",
+        "fingerprint",
+        "multilogin-alternative",
+        "adspower-alternative",
+        "gologin-alternative",
+        "extower-alternative",
+        "self-hosted",
+        "privacy",
+        "browser-automation",
+        "web-scraping",
+        "stealth",
+        "proxy",
+        "puppeteer-stealth",
+        "chrome-automation",
+        "webrtc-leak",
+        "canvas-fingerprint",
+        "browser-fingerprint",
+        "rebrowser"
+    ],
+    "main": "./dist/index.js",
+    "module": "./dist/index.mjs",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.js"
+        },
+        "./puppeteer": {
+            "types": "./dist/puppeteer.d.ts",
+            "import": "./dist/puppeteer.mjs",
+            "require": "./dist/puppeteer.js"
+        },
+        "./playwright": {
+            "types": "./dist/playwright.d.ts",
+            "import": "./dist/playwright.mjs",
+            "require": "./dist/playwright.js"
+        },
+        "./extower": {
+            "types": "./dist/extower.d.ts",
+            "import": "./dist/extower.mjs",
+            "require": "./dist/extower.js"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md",
+        "llms.txt",
+        "LICENSE"
+    ],
+    "scripts": {
+        "dev": "tsup --watch",
+        "build": "tsup",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "typecheck": "tsc --noEmit",
+        "prepublishOnly": "npm run build"
+    },
+    "peerDependencies": {
+        "playwright": ">=1.30.0",
+        "puppeteer": ">=19.0.0",
+        "puppeteer-core": ">=19.0.0",
+        "rebrowser-puppeteer-core": ">=22.0.0"
+    },
+    "peerDependenciesMeta": {
+        "puppeteer": {
+            "optional": true
+        },
+        "puppeteer-core": {
+            "optional": true
+        },
+        "rebrowser-puppeteer-core": {
+            "optional": true
+        },
+        "playwright": {
+            "optional": true
+        }
+    },
+    "dependencies": {
+        "chrome-launcher": "^1.1.2",
+        "chrome-remote-interface": "^0.33.2",
+        "proxy-chain": "^2.5.5",
+        "rebrowser-puppeteer-core": "^24.8.1"
+    },
+    "devDependencies": {
+        "@types/chrome-remote-interface": "^0.33.0",
+        "@types/node": "^20.10.0",
+        "puppeteer-core": "^24.8.0",
+        "tsup": "^8.0.1",
+        "typescript": "^5.3.0",
+        "vitest": "^1.1.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "author": "Aitofy <hello@aitofy.dev>",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/aitofy-dev/browser-profiles"
+    },
+    "homepage": "https://aitofy.dev/browser-profiles",
+    "bugs": {
+        "url": "https://github.com/aitofy-dev/browser-profiles/issues"
+    },
+    "sideEffects": false
+}

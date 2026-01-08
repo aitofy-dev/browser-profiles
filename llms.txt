@@ -1,0 +1,135 @@
+# @aitofy/browser-profiles
+
+> Self-hosted anti-detect browser profiles. The open-source alternative to AdsPower & Multilogin.
+
+## What is this?
+
+Like n8n for automation or Affine for notes, this is AdsPower for developers — self-hosted, open-source, and privacy-first. A TypeScript/JavaScript library for managing anti-detect browser profiles.
+
+## Why Self-Hosted?
+
+- Data stays on your machine (no cloud dependency)
+- Zero telemetry, zero tracking
+- Free forever (no subscriptions)
+- Full control over your profiles
+
+## Key Features
+
+- Self-hosted profile storage (data stays local)
+- 95% anti-detect score (WebRTC, Canvas, Audio protection)
+- Auto timezone detection from proxy IP
+- Proxy support with authentication (HTTP, HTTPS, SOCKS5)
+- Puppeteer and Playwright integration
+- Zero config, works out of the box
+
+## Installation
+
+```bash
+# Recommended: rebrowser-puppeteer-core (better anti-detect!)
+npm install @aitofy/browser-profiles rebrowser-puppeteer-core
+
+# Or standard puppeteer
+npm install @aitofy/browser-profiles puppeteer-core
+```
+
+## Anti-Detect Status
+
+- browserleaks.com: 100% passed
+- pixelscan.net: 100% passed
+- browserscan.net: 95% (Bot Control -5%, Puppeteer limitation)
+- creepjs: 85% passed
+
+Note: 95% is the best achievable with Puppeteer/Playwright. 100% requires modified Chromium.
+
+## Quick Examples
+
+### Create and launch a profile
+
+```typescript
+import { BrowserProfiles } from '@aitofy/browser-profiles';
+
+const profiles = new BrowserProfiles();
+
+const profile = await profiles.create({
+  name: 'My Account',
+  proxy: { type: 'http', host: 'proxy.example.com', port: 8080 },
+  timezone: 'America/New_York',
+});
+
+const { wsEndpoint, close } = await profiles.launch(profile.id);
+// Connect with Puppeteer or Playwright
+await close();
+```
+
+### Quick launch with Puppeteer
+
+```typescript
+import { quickLaunch } from '@aitofy/browser-profiles/puppeteer';
+
+const { page, close } = await quickLaunch({
+  proxy: { type: 'http', host: 'proxy.example.com', port: 8080 },
+});
+
+await page.goto('https://whoer.net');
+await close();
+```
+
+### ExTower API client
+
+```typescript
+import { ExTowerClient } from '@aitofy/browser-profiles/extower';
+
+const client = new ExTowerClient();
+const { id } = await client.createProfile({ name: 'Profile 1' });
+const { puppeteer } = await client.launchBrowser(id);
+```
+
+## API Summary
+
+### BrowserProfiles class
+
+- `create(config)` - Create new profile
+- `launch(id)` - Launch browser for profile
+- `list()` - List all profiles
+- `get(id)` - Get profile by ID
+- `update(id, updates)` - Update profile
+- `delete(id)` - Delete profile
+
+### Puppeteer integration
+
+- `withPuppeteer({ profile })` - Launch profile and connect Puppeteer
+- `quickLaunch({ proxy, timezone })` - Quick launch without saved profile
+
+### Playwright integration
+
+- `withPlaywright({ profile })` - Launch profile and connect Playwright
+
+### ExTower client
+
+- `createProfile(options)` - Create ExTower profile
+- `launchBrowser(userId)` - Launch and get WebSocket URL
+- `listProfiles()` - List all profiles
+- `deleteProfile(userId)` - Delete profile
+
+## Use Cases
+
+1. **Multi-account management** - Run multiple social media or e-commerce accounts
+2. **Web scraping** - Avoid IP bans with rotating proxies and fingerprints
+3. **Testing** - Test websites with different browser configurations
+4. **Automation** - Automate tasks across multiple isolated browser sessions
+
+## Related Searches
+
+- antidetect browser npm
+- puppeteer multi profile
+- extower api nodejs
+- multilogin alternative free
+- browser fingerprint protection
+- puppeteer proxy authentication
+- playwright antidetect
+
+## Links
+
+- npm: https://www.npmjs.com/package/@aitofy/browser-profiles
+- GitHub: https://github.com/aitofy-dev/browser-profiles
+- Documentation: https://aitofy.dev/browser-profiles
