@@ -57,7 +57,7 @@ npm install @aitofy/browser-profiles puppeteer-core
 ### ⚡ 30-Second Example
 
 ```typescript
-import { quickLaunch } from '@aitofy/browser-profiles/puppeteer';
+import { quickLaunch } from '@aitofy/browser-profiles';
 
 // Launch anti-detect browser with proxy (timezone auto-detected!)
 const { page, close } = await quickLaunch({

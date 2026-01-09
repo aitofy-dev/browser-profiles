@@ -21,6 +21,7 @@ Like n8n for automation or Affine for notes, this is AdsPower for developers —
 - Proxy support with authentication (HTTP, HTTPS, SOCKS5)
 - Puppeteer and Playwright integration
 - Zero config, works out of the box
+- **NEW: Simplified imports** - all functions from one entry point
 
 ## Installation
 
@@ -43,28 +44,10 @@ Note: 95% is the best achievable with Puppeteer/Playwright. 100% requires modifi
 
 ## Quick Examples
 
-### Create and launch a profile
+### Quick launch (simplest)
 
 ```typescript
-import { BrowserProfiles } from '@aitofy/browser-profiles';
-
-const profiles = new BrowserProfiles();
-
-const profile = await profiles.create({
-  name: 'My Account',
-  proxy: { type: 'http', host: 'proxy.example.com', port: 8080 },
-  timezone: 'America/New_York',
-});
-
-const { wsEndpoint, close } = await profiles.launch(profile.id);
-// Connect with Puppeteer or Playwright
-await close();
-```
-
-### Quick launch with Puppeteer
-
-```typescript
-import { quickLaunch } from '@aitofy/browser-profiles/puppeteer';
+import { quickLaunch } from '@aitofy/browser-profiles';
 
 const { page, close } = await quickLaunch({
   proxy: { type: 'http', host: 'proxy.example.com', port: 8080 },
@@ -74,17 +57,76 @@ await page.goto('https://whoer.net');
 await close();
 ```
 
-### ExTower API client
+### Temporary session with random fingerprint
 
 ```typescript
-import { ExTowerClient } from '@aitofy/browser-profiles/extower';
+import { createSession } from '@aitofy/browser-profiles';
 
-const client = new ExTowerClient();
-const { id } = await client.createProfile({ name: 'Profile 1' });
-const { puppeteer } = await client.launchBrowser(id);
+const session = await createSession({
+  randomFingerprint: true,
+  proxy: { type: 'http', host: 'proxy.com', port: 8080 },
+});
+
+await session.page.goto('https://example.com');
+await session.close();
+```
+
+### Apply patches to existing page
+
+```typescript
+import { patchPage } from '@aitofy/browser-profiles';
+
+await patchPage(existingPage, {
+  webdriver: true,
+  plugins: true,
+  webrtc: true,
+  fingerprint: { platform: 'Win32' },
+});
+```
+
+### Generate fingerprints
+
+```typescript
+import { generateFingerprint, getFingerprintScripts } from '@aitofy/browser-profiles';
+
+const fp = generateFingerprint({
+  platform: 'macos',
+  gpu: 'apple',
+  language: 'ja-JP',
+});
+
+const scripts = getFingerprintScripts(fp);
+await page.evaluateOnNewDocument(scripts);
+```
+
+### Profile management
+
+```typescript
+import { BrowserProfiles, withPuppeteer } from '@aitofy/browser-profiles';
+
+const profiles = new BrowserProfiles();
+
+const profile = await profiles.create({
+  name: 'My Account',
+  proxy: { type: 'http', host: 'proxy.example.com', port: 8080 },
+});
+
+const { page, close } = await withPuppeteer({ profile: profile.id });
+await page.goto('https://example.com');
+await close();
 ```
 
 ## API Summary
+
+### Main Functions (import from '@aitofy/browser-profiles')
+
+- `quickLaunch({ proxy, timezone })` - Quick launch without saved profile
+- `createSession({ randomFingerprint })` - Temporary session with random fingerprint
+- `patchPage(page, options)` - Apply anti-detect patches to existing page
+- `generateFingerprint(options)` - Generate browser fingerprint on-demand
+- `getFingerprintScripts(fingerprint)` - Get injection scripts for fingerprint
+- `withPuppeteer({ profile })` - Launch profile and connect Puppeteer
+- `launchChromeStandalone(options)` - Launch Chrome without profile management
 
 ### BrowserProfiles class
 
@@ -94,11 +136,6 @@ const { puppeteer } = await client.launchBrowser(id);
 - `get(id)` - Get profile by ID
 - `update(id, updates)` - Update profile
 - `delete(id)` - Delete profile
-
-### Puppeteer integration
-
-- `withPuppeteer({ profile })` - Launch profile and connect Puppeteer
-- `quickLaunch({ proxy, timezone })` - Quick launch without saved profile
 
 ### Playwright integration
 
@@ -127,6 +164,7 @@ const { puppeteer } = await client.launchBrowser(id);
 - browser fingerprint protection
 - puppeteer proxy authentication
 - playwright antidetect
+- scraping fingerprint evasion
 
 ## Links
 

@@ -123,5 +123,30 @@ export type {
 // Result helpers
 export { Ok, Err } from './types';
 
+// ============================================================================
+// Puppeteer Integration (re-exported for convenience)
+// ============================================================================
+// Users can now use:
+//   import { quickLaunch } from '@aitofy/browser-profiles'
+// Instead of:
+//   import { quickLaunch } from '@aitofy/browser-profiles/puppeteer'
+
+export {
+    withPuppeteer,
+    quickLaunch,
+    connectPuppeteer,
+    patchPage,
+    createSession,
+} from './integrations/puppeteer';
+
+export type {
+    WithPuppeteerOptions,
+    WithPuppeteerResult,
+    QuickLaunchOptions,
+    PatchPageOptions,
+    CreateSessionOptions,
+    SessionResult,
+} from './integrations/puppeteer';
+
 // Version
-export const VERSION = '0.2.0';
+export const VERSION = '0.2.1';
