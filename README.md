@@ -152,6 +152,89 @@ await page.goto('https://example.com');
 await close();
 ```
 
+### 🆕 v0.2.0: Advanced Features
+
+#### Temporary Sessions (No Profile Persistence)
+
+```typescript
+import { createSession } from '@aitofy/browser-profiles/puppeteer';
+
+// Quick session with random fingerprint - perfect for scraping
+const session = await createSession({
+  temporary: true,
+  randomFingerprint: true, // Random platform, language, CPU cores
+  proxy: { type: 'http', host: 'proxy.com', port: 8080 },
+});
+
+await session.page.goto('https://example.com');
+await session.close(); // Cleanup
+```
+
+#### Patch Existing Pages
+
+```typescript
+import { patchPage } from '@aitofy/browser-profiles/puppeteer';
+
+// Apply anti-detect patches to any page
+await patchPage(page, {
+  webdriver: true,     // Hide webdriver flag
+  plugins: true,       // Spoof Chrome plugins
+  chrome: true,        // Fix chrome object
+  webrtc: true,        // WebRTC leak protection
+  fingerprint: { platform: 'Win32', hardwareConcurrency: 8 },
+});
+```
+
+#### Generate Fingerprints On-Demand
+
+```typescript
+import { generateFingerprint, getFingerprintScripts } from '@aitofy/browser-profiles';
+
+// Generate a realistic fingerprint
+const fp = generateFingerprint({
+  platform: 'macos',
+  gpu: 'apple',
+  screen: 'retina',
+  language: 'ja-JP',
+});
+
+console.log(fp.userAgent);      // Mozilla/5.0 (Macintosh...
+console.log(fp.webgl.renderer); // ANGLE (Apple, Apple M1 Pro...
+
+// Use with any page
+const scripts = getFingerprintScripts(fp);
+await page.evaluateOnNewDocument(scripts);
+```
+
+#### Standalone Chrome Launch
+
+```typescript
+import { launchChromeStandalone } from '@aitofy/browser-profiles';
+import puppeteer from 'puppeteer-core';
+
+// Launch Chrome without profile management
+const { wsEndpoint, close } = await launchChromeStandalone({
+  headless: false,
+  proxy: { type: 'http', host: 'proxy.com', port: 8080 },
+});
+
+const browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
+await close();
+```
+
+#### Inject Your Own Puppeteer
+
+```typescript
+import puppeteer from 'rebrowser-puppeteer-core';
+import { withPuppeteer } from '@aitofy/browser-profiles/puppeteer';
+
+// Use your own puppeteer instance
+const { browser, page } = await withPuppeteer({
+  profile: 'my-profile',
+  puppeteer, // ← Inject here
+});
+```
+
 ### 📁 Profile Management
 
 Profiles are saved locally to `~/.aitofy/browser-profiles/` and persist between sessions.

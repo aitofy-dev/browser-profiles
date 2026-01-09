@@ -58,6 +58,14 @@ export {
     buildProxyUrl,
     detectTimezoneFromIP,
     autoDetectTimezone,
+    // v0.2.0: Standalone Chrome launch
+    launchChromeStandalone,
+} from './chrome-launcher';
+
+// Chrome launcher types
+export type {
+    StandaloneLaunchOptions,
+    StandaloneLaunchResult,
 } from './chrome-launcher';
 
 // Fingerprint protection scripts (for custom use)
@@ -68,6 +76,15 @@ export {
     AUDIO_PROTECTION_SCRIPT,
     getAllProtectionScripts,
     createNavigatorScript,
+    // v0.2.0: Fingerprint generation
+    generateFingerprint,
+    getFingerprintScripts,
+} from './fingerprint';
+
+// Fingerprint types
+export type {
+    GenerateFingerprintOptions,
+    GeneratedFingerprint,
 } from './fingerprint';
 
 // Types
@@ -107,4 +124,4 @@ export type {
 export { Ok, Err } from './types';
 
 // Version
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';

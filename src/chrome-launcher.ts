@@ -456,3 +456,198 @@ export async function closeAllBrowsers(): Promise<void> {
 export function getRunningBrowsers(): string[] {
     return Array.from(runningBrowsers.keys());
 }
+
+// ============================================================================
+// Standalone Chrome Launch (v0.2.0)
+// ============================================================================
+
+/**
+ * Options for standalone Chrome launch
+ */
+export interface StandaloneLaunchOptions {
+    /**
+     * Run in headless mode
+     * @default false
+     */
+    headless?: boolean;
+
+    /**
+     * Custom Chrome path
+     */
+    chromePath?: string;
+
+    /**
+     * User data directory (for session persistence)
+     * If not provided, a temporary directory will be used
+     */
+    userDataDir?: string;
+
+    /**
+     * Proxy configuration
+     */
+    proxy?: ProxyConfig;
+
+    /**
+     * Timezone (auto-detected from proxy if not specified)
+     */
+    timezone?: string;
+
+    /**
+     * Fingerprint configuration
+     */
+    fingerprint?: {
+        userAgent?: string;
+        language?: string;
+        platform?: string;
+        hardwareConcurrency?: number;
+        deviceMemory?: number;
+    };
+
+    /**
+     * Additional Chrome arguments
+     */
+    args?: string[];
+
+    /**
+     * Extensions to load
+     */
+    extensions?: string[];
+}
+
+/**
+ * Result from standalone Chrome launch
+ */
+export interface StandaloneLaunchResult {
+    /**
+     * WebSocket debugger URL
+     */
+    wsEndpoint: string;
+
+    /**
+     * Chrome process ID
+     */
+    pid: number;
+
+    /**
+     * Chrome debugging port
+     */
+    port: number;
+
+    /**
+     * Close function
+     */
+    close: () => Promise<void>;
+}
+
+/**
+ * Launch Chrome without profile management
+ * 
+ * A standalone version of launchChrome that doesn't require a profile object.
+ * Perfect for quick scripts, testing, or when you don't need session persistence.
+ * 
+ * @example Basic usage
+ * ```typescript
+ * import { launchChromeStandalone } from '@aitofy/browser-profiles';
+ * 
+ * const { wsEndpoint, close } = await launchChromeStandalone({
+ *   headless: false,
+ * });
+ * 
+ * // Connect with Puppeteer
+ * const browser = await puppeteer.connect({ browserWSEndpoint: wsEndpoint });
+ * 
+ * // ... do work ...
+ * 
+ * await close();
+ * ```
+ * 
+ * @example With proxy and fingerprint
+ * ```typescript
+ * const { wsEndpoint, close } = await launchChromeStandalone({
+ *   proxy: { type: 'http', host: 'proxy.com', port: 8080 },
+ *   fingerprint: {
+ *     platform: 'Win32',
+ *     language: 'en-US',
+ *   },
+ * });
+ * ```
+ */
+export async function launchChromeStandalone(options: StandaloneLaunchOptions = {}): Promise<StandaloneLaunchResult> {
+    await loadDependencies();
+
+    const {
+        headless = false,
+        chromePath,
+        userDataDir,
+        proxy,
+        timezone,
+        fingerprint = {},
+        args = [],
+        extensions = [],
+    } = options;
+
+    // Create a temporary profile-like object for internal use
+    const tempProfile: StoredProfile = {
+        id: `standalone-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+        name: 'Standalone Session',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        proxy,
+        timezone,
+        fingerprint: {
+            userAgent: fingerprint.userAgent,
+            language: fingerprint.language || 'en-US',
+            platform: fingerprint.platform || 'Win32',
+            hardwareConcurrency: fingerprint.hardwareConcurrency || 8,
+            deviceMemory: fingerprint.deviceMemory || 8,
+        },
+    };
+
+    // Determine user data directory
+    const finalUserDataDir = userDataDir || path.join(os.tmpdir(), `chrome-${tempProfile.id}`);
+
+    // Ensure directory exists
+    if (!fs.existsSync(finalUserDataDir)) {
+        fs.mkdirSync(finalUserDataDir, { recursive: true });
+    }
+
+    // Launch using existing launchChrome
+    const result = await launchChrome({
+        profile: tempProfile,
+        userDataDir: finalUserDataDir,
+        headless,
+        chromePath,
+        args,
+        extensions,
+    });
+
+    // Create a simplified close function
+    const close = async () => {
+        await result.close();
+
+        // Clean up temporary directory if we created it
+        if (!userDataDir && fs.existsSync(finalUserDataDir)) {
+            try {
+                // Use fs.rmSync for Node 14+
+                if (typeof fs.rmSync === 'function') {
+                    fs.rmSync(finalUserDataDir, { recursive: true, force: true });
+                } else {
+                    // Fallback for older Node versions
+                    fs.rmdirSync(finalUserDataDir, { recursive: true } as any);
+                }
+            } catch {
+                // Ignore cleanup errors
+            }
+        }
+    };
+
+    console.log(`[browser-profiles] Chrome launched standalone (${headless ? 'headless' : 'headed'})`);
+
+    return {
+        wsEndpoint: result.wsEndpoint,
+        pid: result.pid,
+        port: result.port,
+        close,
+    };
+}
+

@@ -744,3 +744,374 @@ export function createClientHintsScript(config: {
 })();
 `;
 }
+
+// ============================================================================
+// Fingerprint Generation
+// ============================================================================
+
+/**
+ * User agent data for different platforms
+ */
+const USER_AGENTS = {
+  windows: [
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+  ],
+  macos: [
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+  ],
+  linux: [
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
+  ],
+};
+
+/**
+ * Screen resolutions for different platforms
+ */
+const SCREEN_RESOLUTIONS = {
+  desktop: [
+    { width: 1920, height: 1080 },
+    { width: 2560, height: 1440 },
+    { width: 1366, height: 768 },
+    { width: 1536, height: 864 },
+    { width: 1440, height: 900 },
+    { width: 1680, height: 1050 },
+  ],
+  laptop: [
+    { width: 1366, height: 768 },
+    { width: 1440, height: 900 },
+    { width: 1536, height: 864 },
+  ],
+  retina: [
+    { width: 2880, height: 1800 },
+    { width: 3024, height: 1964 },
+  ],
+};
+
+/**
+ * WebGL renderers for different GPU vendors
+ */
+const WEBGL_RENDERERS = {
+  intel: [
+    'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (Intel, Intel(R) Iris(TM) Plus Graphics 640 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (Intel, Intel(R) HD Graphics 620 Direct3D11 vs_5_0 ps_5_0)',
+  ],
+  nvidia: [
+    'ANGLE (NVIDIA, NVIDIA GeForce GTX 1080 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce RTX 3080 Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (NVIDIA, NVIDIA GeForce RTX 4090 Direct3D11 vs_5_0 ps_5_0)',
+  ],
+  amd: [
+    'ANGLE (AMD, AMD Radeon RX 580 Series Direct3D11 vs_5_0 ps_5_0)',
+    'ANGLE (AMD, AMD Radeon RX 6800 XT Direct3D11 vs_5_0 ps_5_0)',
+  ],
+  apple: [
+    'ANGLE (Apple, Apple M1 Pro, OpenGL 4.1)',
+    'ANGLE (Apple, Apple M2, OpenGL 4.1)',
+    'ANGLE (Apple, Apple M1 Max, OpenGL 4.1)',
+  ],
+};
+
+/**
+ * Options for generating a fingerprint
+ */
+export interface GenerateFingerprintOptions {
+  /**
+   * Target platform
+   * @default 'random'
+   */
+  platform?: 'windows' | 'macos' | 'linux' | 'random';
+
+  /**
+   * Chrome version to use
+   * @default 'latest'
+   */
+  browser?: 'chrome' | 'edge' | 'brave';
+
+  /**
+   * Browser version (major)
+   * @default random between 118-122
+   */
+  version?: number;
+
+  /**
+   * Screen type
+   * @default 'random'
+   */
+  screen?: 'desktop' | 'laptop' | 'retina' | 'random';
+
+  /**
+   * GPU vendor preference
+   * @default 'random'
+   */
+  gpu?: 'intel' | 'nvidia' | 'amd' | 'apple' | 'random';
+
+  /**
+   * Language/Locale
+   * @default 'en-US'
+   */
+  language?: string;
+
+  /**
+   * Timezone
+   */
+  timezone?: string;
+
+  /**
+   * Custom overrides (will override generated values)
+   */
+  overrides?: Partial<GeneratedFingerprint>;
+}
+
+/**
+ * Generated fingerprint data
+ */
+export interface GeneratedFingerprint {
+  // Navigator properties
+  userAgent: string;
+  platform: string;
+  language: string;
+  languages: string[];
+  hardwareConcurrency: number;
+  deviceMemory: number;
+  vendor: string;
+
+  // Screen properties
+  screen: {
+    width: number;
+    height: number;
+    availWidth: number;
+    availHeight: number;
+    colorDepth: number;
+    pixelDepth: number;
+    devicePixelRatio: number;
+  };
+
+  // WebGL properties
+  webgl: {
+    vendor: string;
+    renderer: string;
+  };
+
+  // Client hints
+  clientHints: {
+    platform: string;
+    platformVersion: string;
+    architecture: string;
+    mobile: boolean;
+    brands: Array<{ brand: string; version: string }>;
+  };
+
+  // Metadata
+  meta: {
+    generatedAt: Date;
+    seed: string;
+  };
+}
+
+/**
+ * Generate a complete browser fingerprint profile
+ * 
+ * Creates a realistic, consistent fingerprint that can be used for
+ * anti-detect browsing without creating a persistent profile.
+ * 
+ * @example Random fingerprint
+ * ```typescript
+ * import { generateFingerprint } from '@aitofy/browser-profiles';
+ * 
+ * const fp = generateFingerprint();
+ * console.log(fp.userAgent);
+ * console.log(fp.screen);
+ * console.log(fp.webgl);
+ * ```
+ * 
+ * @example Specific platform
+ * ```typescript
+ * const fp = generateFingerprint({
+ *   platform: 'windows',
+ *   gpu: 'nvidia',
+ *   screen: 'desktop',
+ *   language: 'ja-JP',
+ * });
+ * ```
+ * 
+ * @example With custom overrides
+ * ```typescript
+ * const fp = generateFingerprint({
+ *   platform: 'macos',
+ *   overrides: {
+ *     hardwareConcurrency: 16,
+ *     deviceMemory: 32,
+ *   },
+ * });
+ * ```
+ */
+export function generateFingerprint(options: GenerateFingerprintOptions = {}): GeneratedFingerprint {
+  const randomItem = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
+  const randomInt = (min: number, max: number): number => Math.floor(Math.random() * (max - min + 1)) + min;
+
+  // Generate seed for reproducibility
+  const seed = `fp-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+
+  // Determine platform
+  type Platform = 'windows' | 'macos' | 'linux';
+  const platforms: Platform[] = ['windows', 'macos', 'linux'];
+  const selectedPlatform: Platform = options.platform === 'random' || !options.platform
+    ? randomItem(platforms)
+    : options.platform;
+
+  // Platform-specific properties
+  const platformConfigs = {
+    windows: { platform: 'Win32', vendor: 'Google Inc.', gpuDefault: 'intel' as const },
+    macos: { platform: 'MacIntel', vendor: 'Google Inc.', gpuDefault: 'apple' as const },
+    linux: { platform: 'Linux x86_64', vendor: 'Google Inc.', gpuDefault: 'intel' as const },
+  };
+  const platformConfig = platformConfigs[selectedPlatform];
+
+  // Get user agent
+  const userAgent = randomItem(USER_AGENTS[selectedPlatform]);
+
+  // Determine screen resolution
+  type ScreenType = 'desktop' | 'laptop' | 'retina';
+  const screenTypes: ScreenType[] = ['desktop', 'laptop', 'retina'];
+  const selectedScreen: ScreenType = options.screen === 'random' || !options.screen
+    ? randomItem(screenTypes)
+    : options.screen;
+  const resolution = randomItem(SCREEN_RESOLUTIONS[selectedScreen]);
+  const devicePixelRatio = selectedScreen === 'retina' ? 2 : 1;
+
+  // Determine GPU
+  type GpuVendor = 'intel' | 'nvidia' | 'amd' | 'apple';
+  const selectedGpu: GpuVendor = options.gpu === 'random' || !options.gpu
+    ? (selectedPlatform === 'macos' ? 'apple' : platformConfig.gpuDefault)
+    : options.gpu;
+  const webglRenderer = randomItem(WEBGL_RENDERERS[selectedGpu]);
+
+  // Language
+  const language = options.language || 'en-US';
+  const languages = [language, language.split('-')[0]];
+
+  // Hardware
+  const coreOptions = selectedPlatform === 'macos' ? [8, 10, 12, 16] : [4, 6, 8, 12, 16];
+  const memoryOptions = selectedPlatform === 'macos' ? [8, 16, 32, 64] : [4, 8, 16, 32];
+  const hardwareConcurrency = randomItem(coreOptions);
+  const deviceMemory = randomItem(memoryOptions);
+
+  // Browser version
+  const version = options.version || randomInt(118, 122);
+
+  // Client hints
+  const clientHintsPlatforms = {
+    windows: 'Windows',
+    macos: 'macOS',
+    linux: 'Linux',
+  };
+  const clientHintsPlatform = clientHintsPlatforms[selectedPlatform];
+
+  const platformVersions = {
+    windows: ['10.0.0', '10.0.19045', '11.0.0'],
+    macos: ['14.2.0', '13.6.1', '14.0.0'],
+    linux: ['6.5.0', '5.15.0'],
+  };
+
+  const fingerprint: GeneratedFingerprint = {
+    userAgent,
+    platform: platformConfig.platform,
+    language,
+    languages,
+    hardwareConcurrency,
+    deviceMemory,
+    vendor: platformConfig.vendor,
+
+    screen: {
+      width: resolution.width,
+      height: resolution.height,
+      availWidth: resolution.width,
+      availHeight: resolution.height - (selectedPlatform === 'macos' ? 25 : 40),
+      colorDepth: 24,
+      pixelDepth: 24,
+      devicePixelRatio,
+    },
+
+    webgl: {
+      vendor: 'Google Inc. (ANGLE)',
+      renderer: webglRenderer,
+    },
+
+    clientHints: {
+      platform: clientHintsPlatform,
+      platformVersion: randomItem(platformVersions[selectedPlatform]),
+      architecture: selectedPlatform === 'macos' ? 'arm' : 'x86',
+      mobile: false,
+      brands: [
+        { brand: 'Chromium', version: String(version) },
+        { brand: 'Google Chrome', version: String(version) },
+        { brand: 'Not_A Brand', version: '8' },
+      ],
+    },
+
+    meta: {
+      generatedAt: new Date(),
+      seed,
+    },
+  };
+
+  // Apply custom overrides
+  if (options.overrides) {
+    Object.assign(fingerprint, options.overrides);
+  }
+
+  return fingerprint;
+}
+
+/**
+ * Get all injection scripts for a fingerprint
+ * 
+ * Convenience function that combines generateFingerprint with script generation
+ */
+export function getFingerprintScripts(fingerprint: GeneratedFingerprint): string {
+  const scripts: string[] = [];
+
+  // Navigator script
+  scripts.push(createNavigatorScript({
+    language: fingerprint.language,
+    platform: fingerprint.platform,
+    hardwareConcurrency: fingerprint.hardwareConcurrency,
+    deviceMemory: fingerprint.deviceMemory,
+    vendor: fingerprint.vendor,
+  }));
+
+  // Screen script
+  scripts.push(createScreenScript({
+    width: fingerprint.screen.width,
+    height: fingerprint.screen.height,
+    availWidth: fingerprint.screen.availWidth,
+    availHeight: fingerprint.screen.availHeight,
+    colorDepth: fingerprint.screen.colorDepth,
+    pixelDepth: fingerprint.screen.pixelDepth,
+    devicePixelRatio: fingerprint.screen.devicePixelRatio,
+  }));
+
+  // Client hints script
+  scripts.push(createClientHintsScript({
+    platform: fingerprint.clientHints.platform,
+    platformVersion: fingerprint.clientHints.platformVersion,
+    architecture: fingerprint.clientHints.architecture,
+    mobile: fingerprint.clientHints.mobile,
+    brands: fingerprint.clientHints.brands,
+  }));
+
+  // Protection scripts
+  scripts.push(WEBRTC_PROTECTION_SCRIPT);
+  scripts.push(CANVAS_PROTECTION_SCRIPT);
+  scripts.push(WEBGL_PROTECTION_SCRIPT);
+  scripts.push(AUDIO_PROTECTION_SCRIPT);
+  scripts.push(AUTOMATION_BYPASS_SCRIPT);
+
+  return scripts.join('\n\n');
+}

@@ -1,6 +1,6 @@
 {
     "name": "@aitofy/browser-profiles",
-    "version": "0.1.1",
+    "version": "0.2.0",
     "description": "Self-hosted anti-detect browser profiles. Open-source AdsPower alternative for Puppeteer & Playwright.",
     "keywords": [
         "antidetect",
@@ -57,6 +57,7 @@
     "files": [
         "dist",
         "README.md",
+        "CHANGELOG.md",
         "llms.txt",
         "LICENSE"
     ],
