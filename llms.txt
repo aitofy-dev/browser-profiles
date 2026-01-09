@@ -42,6 +42,19 @@ npm install @aitofy/browser-profiles puppeteer-core
 
 Note: 95% is the best achievable with Puppeteer/Playwright. 100% requires modified Chromium.
 
+## CLI Tool
+
+Install globally: npm install -g @aitofy/browser-profiles
+
+Commands:
+- browser-profiles list - List all profiles
+- browser-profiles create <name> - Create new profile
+- browser-profiles open <id> - Open browser with profile
+- browser-profiles launch - Quick launch with random fingerprint
+- browser-profiles info <id> - Show profile details
+- browser-profiles delete <id> - Delete profile
+- browser-profiles path - Show storage path
+
 ## Quick Examples
 
 ### Quick launch (simplest)

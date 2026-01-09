@@ -52,6 +52,41 @@ npm install @aitofy/browser-profiles puppeteer-core
 
 > **Note**: 95% is the best achievable with Puppeteer/Playwright. 100% requires modified Chromium (like AdsPower).
 
+## 💻 CLI Tool
+
+Install globally to use the CLI:
+
+```bash
+npm install -g @aitofy/browser-profiles
+```
+
+### Commands
+
+```bash
+# List all profiles
+browser-profiles list
+
+# Create a new profile
+browser-profiles create my-account
+browser-profiles create my-account --proxy http://user:pass@proxy.com:8080
+
+# Open browser with a profile
+browser-profiles open <profile-id>
+
+# Quick launch (no profile needed)
+browser-profiles launch
+browser-profiles launch --proxy http://proxy.com:8080
+
+# Show profile details
+browser-profiles info <profile-id>
+
+# Delete a profile
+browser-profiles delete <profile-id>
+
+# Show storage path
+browser-profiles path
+```
+
 ## 🚀 Quick Start
 
 ### ⚡ 30-Second Example
