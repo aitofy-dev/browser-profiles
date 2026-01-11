@@ -407,15 +407,18 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         }
     });
 
-    // Always create NEW page - existing pages don't receive evaluateOnNewDocument scripts properly
-    // when connecting to an existing browser via puppeteer.connect()
-    const page = await browser.newPage();
+    // Reuse existing page or create new one if needed
+    const pages = await browser.pages();
+    const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
-    // Inject scripts into the new page
+    // Inject scripts into the page
     await injectProtectionScripts(page);
 
-    // Navigate to trigger the scripts
-    await page.goto('data:text/html,<html><body></body></html>');
+    // Navigate to trigger the scripts (only if page is blank)
+    const currentUrl = page.target().url();
+    if (!currentUrl || currentUrl === 'about:blank' || currentUrl.startsWith('data:text/html')) {
+        await page.goto('data:text/html,<html><body></body></html>');
+    }
 
     // Cleanup function
     const close = async () => {
@@ -488,8 +491,9 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
         slowMo: options.slowMo,
     });
 
-    // Create NEW page (existing pages don't get evaluateOnNewDocument scripts)
-    const page = await browser.newPage();
+    // Reuse existing page or create new one if needed
+    const pages = await browser.pages();
+    const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
     // Inject fingerprint protection scripts
     const fpConfig = {
@@ -562,8 +566,11 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
         })();
     `);
 
-    // Navigate to trigger the scripts
-    await page.goto('data:text/html,<html><body></body></html>');
+    // Navigate to trigger the scripts (only if page is blank)
+    const currentUrl = page.target().url();
+    if (!currentUrl || currentUrl === 'about:blank' || currentUrl.startsWith('data:text/html')) {
+        await page.goto('data:text/html,<html><body></body></html>');
+    }
 
     // Cleanup function (also deletes temporary profile)
     const close = async () => {
@@ -1042,8 +1049,9 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
         defaultViewport: null,
     });
 
-    // Create new page
-    const page = await browser.newPage();
+    // Reuse existing page or create new one if needed
+    const pages = await browser.pages();
+    const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
     // Apply anti-detect patches
     await patchPage(page, {
@@ -1069,8 +1077,11 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
         await client.send('Emulation.setTimezoneOverride', { timezoneId: timezone });
     }
 
-    // Navigate to trigger the scripts
-    await page.goto('data:text/html,<html><body></body></html>');
+    // Navigate to trigger the scripts (only if page is blank)
+    const currentUrl = page.target().url();
+    if (!currentUrl || currentUrl === 'about:blank' || currentUrl.startsWith('data:text/html')) {
+        await page.goto('data:text/html,<html><body></body></html>');
+    }
 
     const session = {
         id: sessionId,

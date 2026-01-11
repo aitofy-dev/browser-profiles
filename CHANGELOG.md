@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.4] - 2026-01-12
+
+### Fixed
+
+- **Multiple pages issue** - Fixed browser opening with 2 pages instead of 1
+  - `withPuppeteer()`, `quickLaunch()`, and `createSession()` now reuse existing browser pages
+  - Prevents duplicate empty pages from appearing on browser launch
+  - Only creates a new page if no pages exist yet
+  - Better resource management and cleaner user experience
+
 ## [0.2.3] - 2026-01-09
 
 ### Changed
