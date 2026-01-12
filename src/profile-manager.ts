@@ -262,13 +262,6 @@ export class BrowserProfiles {
             throw new Error(`Profile not found: ${profileId}`);
         }
 
-        // Close existing browser for this profile if any
-        if (this.runningBrowsers.has(profileId)) {
-            const existing = this.runningBrowsers.get(profileId)!;
-            await existing.close();
-            this.runningBrowsers.delete(profileId);
-        }
-
         // Get user data directory
         const userDataDir = this.getProfileDataPath(profileId);
 

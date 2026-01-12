@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-01-12
+
+### Added
+
+- **Cross-process browser session detection** 🔄
+  - Automatically detects if a browser is already running for a profile
+  - If browser is already running: returns existing connection (no error!)
+  - If browser is not running: launches new browser as usual
+  - Uses lock files (`~/.aitofy/browser-profiles/<profile-id>/.browser-lock.json`) to track sessions
+  - Works across different Node.js processes and terminals
+
+  ```typescript
+  // Terminal 1
+  const { page } = await withPuppeteer({ profile: 'my-profile' });
+  // Browser launched...
+  
+  // Terminal 2 (same profile, no error!)
+  const { page } = await withPuppeteer({ profile: 'my-profile' });
+  // [browser-profiles] ♻️ Found existing browser for profile "my-profile"
+  // Connects to existing browser instead of failing!
+  ```
+
+### Fixed
+
+- Running multiple scripts with the same profile ID no longer causes "port already in use" errors
+- Stale lock files are automatically cleaned up when browser process has died
+
 ## [0.2.5] - 2026-01-12
 
 ### Added

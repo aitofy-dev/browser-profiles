@@ -33,6 +33,108 @@ async function loadDependencies() {
 const runningBrowsers: Map<string, { process: any; proxyUrl?: string }> = new Map();
 
 /**
+ * Lock file info stored in profile directory
+ */
+interface BrowserLockInfo {
+    pid: number;
+    port: number;
+    wsEndpoint: string;
+    startedAt: number;
+    proxyUrl?: string;
+}
+
+/**
+ * Write lock file to track running browser
+ */
+function writeLockFile(userDataDir: string, info: BrowserLockInfo): void {
+    const lockPath = path.join(userDataDir, '.browser-lock.json');
+    try {
+        fs.writeFileSync(lockPath, JSON.stringify(info, null, 2));
+    } catch {
+        // Ignore write errors
+    }
+}
+
+/**
+ * Read lock file from profile directory
+ */
+function readLockFile(userDataDir: string): BrowserLockInfo | null {
+    const lockPath = path.join(userDataDir, '.browser-lock.json');
+    try {
+        if (fs.existsSync(lockPath)) {
+            const content = fs.readFileSync(lockPath, 'utf-8');
+            return JSON.parse(content) as BrowserLockInfo;
+        }
+    } catch {
+        // Ignore read errors
+    }
+    return null;
+}
+
+/**
+ * Delete lock file
+ */
+function deleteLockFile(userDataDir: string): void {
+    const lockPath = path.join(userDataDir, '.browser-lock.json');
+    try {
+        if (fs.existsSync(lockPath)) {
+            fs.unlinkSync(lockPath);
+        }
+    } catch {
+        // Ignore delete errors
+    }
+}
+
+/**
+ * Check if a process is still running by PID
+ */
+function isProcessRunning(pid: number): boolean {
+    try {
+        // Sending signal 0 doesn't kill the process, just checks if it exists
+        process.kill(pid, 0);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Try to connect to an existing browser and verify it's responsive
+ */
+async function tryConnectExisting(lockInfo: BrowserLockInfo): Promise<{
+    wsEndpoint: string;
+    pid: number;
+    port: number;
+} | null> {
+    // First check if process is running
+    if (!isProcessRunning(lockInfo.pid)) {
+        return null;
+    }
+
+    // Try to fetch browser info to verify it's responsive
+    try {
+        const response = await fetch(`http://localhost:${lockInfo.port}/json/version`, {
+            signal: AbortSignal.timeout(2000), // 2 second timeout
+        });
+
+        if (!response.ok) {
+            return null;
+        }
+
+        const data = await response.json() as { webSocketDebuggerUrl: string };
+
+        // Return the current wsEndpoint (might be different from lock file if browser restarted)
+        return {
+            wsEndpoint: data.webSocketDebuggerUrl,
+            pid: lockInfo.pid,
+            port: lockInfo.port,
+        };
+    } catch {
+        return null;
+    }
+}
+
+/**
  * Get Chrome/Chromium executable path
  */
 export function getChromePath(customPath?: string): string {
@@ -169,6 +271,46 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
     await loadDependencies();
 
     const { profile, userDataDir, headless = false, chromePath, args = [], extensions = [] } = options;
+
+    // ===== CHECK FOR EXISTING BROWSER SESSION =====
+    // Check if browser is already running for this profile (across processes)
+    const lockInfo = readLockFile(userDataDir);
+    if (lockInfo) {
+        const existing = await tryConnectExisting(lockInfo);
+        if (existing) {
+            console.log(`[browser-profiles] ♻️ Found existing browser for profile "${profile.name}" (PID: ${existing.pid}, Port: ${existing.port})`);
+
+            // Create a close function that properly cleans up
+            const close = async () => {
+                try {
+                    if (isProcessRunning(existing.pid)) {
+                        process.kill(existing.pid, 'SIGTERM');
+                    }
+                    deleteLockFile(userDataDir);
+                    runningBrowsers.delete(profile.id);
+
+                    // Also close proxy if stored in lock
+                    if (lockInfo.proxyUrl) {
+                        await proxyChain.closeAnonymizedProxy(lockInfo.proxyUrl, true).catch(() => { });
+                    }
+                } catch (error) {
+                    console.error('Error closing browser:', error);
+                }
+            };
+
+            return {
+                wsEndpoint: existing.wsEndpoint,
+                pid: existing.pid,
+                port: existing.port,
+                profileId: profile.id,
+                close,
+            };
+        } else {
+            // Lock file exists but browser not running - clean up stale lock
+            console.log(`[browser-profiles] 🧹 Cleaning up stale lock file for profile "${profile.name}"`);
+            deleteLockFile(userDataDir);
+        }
+    }
 
     // Get Chrome path
     const executablePath = getChromePath(chromePath);
@@ -374,6 +516,15 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
         proxyUrl: anonymizedProxyUrl,
     });
 
+    // Write lock file for cross-process detection
+    writeLockFile(userDataDir, {
+        pid: chromeProcess.pid,
+        port: chromeProcess.port,
+        wsEndpoint: versionInfo.webSocketDebuggerUrl,
+        startedAt: Date.now(),
+        proxyUrl: anonymizedProxyUrl,
+    });
+
     // Create close function
     const close = async () => {
         try {
@@ -390,6 +541,9 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
 
             // Remove from tracking
             runningBrowsers.delete(profile.id);
+
+            // Delete lock file
+            deleteLockFile(userDataDir);
         } catch (error) {
             console.error('Error closing browser:', error);
         }
