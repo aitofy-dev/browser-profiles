@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.7] - 2026-01-12
+
+### Added
+
+- **Session isolation** - Each session now creates its own page
+  - When reconnecting to existing browser, creates NEW page instead of reusing existing pages
+  - Sessions no longer interfere with each other's pages
+  
+- **`close()` and `terminate()` separation** 🔄
+  - `close()` - Only closes THIS session's page (browser stays running for other sessions)
+  - `terminate()` - Kills the browser process entirely (same as old behavior)
+  - `close({ terminate: true })` - Alternative way to terminate
+
+  ```typescript
+  // Session 1
+  const session1 = await withPuppeteer({ profile: 'my-profile' });
+  
+  // Session 2 (same browser, different page)
+  const session2 = await withPuppeteer({ profile: 'my-profile' });
+  
+  // Close session2's page only (browser stays running)
+  await session2.close();
+  
+  // Session1 still works!
+  await session1.page.goto('https://example.com');
+  
+  // Kill browser entirely
+  await session1.terminate();
+  ```
+
+### Changed
+
+- Default `close()` behavior: Now only closes the session's page (previously killed browser)
+- To kill browser, use `terminate()` or `close({ terminate: true })`
+
 ## [0.2.6] - 2026-01-12
 
 ### Added

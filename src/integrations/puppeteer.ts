@@ -129,6 +129,18 @@ export interface QuickLaunchOptions extends LaunchOptions {
 }
 
 /**
+ * Options for close function
+ */
+export interface CloseOptions {
+    /**
+     * If true, kill the browser process entirely.
+     * If false (default), only close pages opened by this session.
+     * @default false
+     */
+    terminate?: boolean;
+}
+
+/**
  * Result from withPuppeteer
  */
 export interface WithPuppeteerResult {
@@ -153,9 +165,17 @@ export interface WithPuppeteerResult {
     launch: LaunchResult;
 
     /**
-     * Cleanup function - closes browser and proxy
+     * Close this session's pages only (browser stays running for other sessions).
+     * Use `terminate()` to kill the browser entirely.
+     * @param options - Optional close options
      */
-    close: () => Promise<void>;
+    close: (options?: CloseOptions) => Promise<void>;
+
+    /**
+     * Kill the browser process entirely.
+     * Shorthand for `close({ terminate: true })`
+     */
+    terminate: () => Promise<void>;
 }
 
 /**
@@ -417,27 +437,36 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         }
     });
 
-    // Reuse existing page or create new one if needed
-    const pages = await browser.pages();
-    const page = pages.length > 0 ? pages[0] : await browser.newPage();
+    // Always create NEW page for this session (session isolation)
+    // This ensures each session has its own page, even when reconnecting to existing browser
+    const page = await browser.newPage();
 
-    // Inject scripts into the page
+    // Inject scripts into the new page
     await injectProtectionScripts(page);
 
-    // Navigate to trigger the scripts (only if page is blank)
-    const currentUrl = page.target().url();
-    if (!currentUrl || currentUrl === 'about:blank' || currentUrl.startsWith('data:text/html')) {
-        await page.goto('data:text/html,<html><body></body></html>');
-    }
+    // Navigate to trigger the scripts
+    await page.goto('data:text/html,<html><body></body></html>');
 
-    // Cleanup function
-    const close = async () => {
+    // Close function - by default only closes this session's page
+    const close = async (options?: CloseOptions) => {
         try {
-            browser.disconnect();
+            if (options?.terminate) {
+                // Kill the entire browser
+                browser.disconnect();
+                await launch.close();
+            } else {
+                // Only close this session's page (browser stays running)
+                await page.close().catch(() => { });
+                browser.disconnect();
+            }
         } catch {
-            // Ignore disconnect errors
+            // Ignore errors
         }
-        await launch.close();
+    };
+
+    // Terminate function - kills the browser entirely
+    const terminate = async () => {
+        await close({ terminate: true });
     };
 
     return {
@@ -446,6 +475,7 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         profile,
         launch,
         close,
+        terminate,
     };
 }
 
@@ -501,9 +531,8 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
         slowMo: options.slowMo,
     });
 
-    // Reuse existing page or create new one if needed
-    const pages = await browser.pages();
-    const page = pages.length > 0 ? pages[0] : await browser.newPage();
+    // Always create NEW page for this session (session isolation)
+    const page = await browser.newPage();
 
     // Inject fingerprint protection scripts
     const fpConfig = {
@@ -576,25 +605,34 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
         })();
     `);
 
-    // Navigate to trigger the scripts (only if page is blank)
-    const currentUrl = page.target().url();
-    if (!currentUrl || currentUrl === 'about:blank' || currentUrl.startsWith('data:text/html')) {
-        await page.goto('data:text/html,<html><body></body></html>');
-    }
+    // Navigate to trigger the scripts
+    await page.goto('data:text/html,<html><body></body></html>');
 
-    // Cleanup function (also deletes temporary profile)
-    const close = async () => {
+    // Close function - by default only closes this session's page
+    const close = async (closeOptions?: CloseOptions) => {
         try {
-            browser.disconnect();
-        } catch {
-            // Ignore disconnect errors
-        }
-        await launch.close();
+            if (closeOptions?.terminate) {
+                // Kill the entire browser
+                browser.disconnect();
+                await launch.close();
 
-        // Delete temporary profile if it was auto-generated
-        if (!options.name) {
-            await profiles.delete(profile.id);
+                // Delete temporary profile if it was auto-generated
+                if (!options.name) {
+                    await profiles.delete(profile.id);
+                }
+            } else {
+                // Only close this session's page (browser stays running)
+                await page.close().catch(() => { });
+                browser.disconnect();
+            }
+        } catch {
+            // Ignore errors
         }
+    };
+
+    // Terminate function - kills the browser entirely
+    const terminate = async () => {
+        await close({ terminate: true });
     };
 
     return {
@@ -603,6 +641,7 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
         profile,
         launch,
         close,
+        terminate,
     };
 }
 
@@ -962,9 +1001,17 @@ export interface SessionResult {
     };
 
     /**
-     * Cleanup function - closes browser and cleans up resources
+     * Close this session's page only (browser stays running for other sessions).
+     * Use `terminate()` to kill the browser entirely.
+     * @param options - Optional close options
      */
-    close: () => Promise<void>;
+    close: (options?: { terminate?: boolean }) => Promise<void>;
+
+    /**
+     * Kill the browser process entirely.
+     * Shorthand for `close({ terminate: true })`
+     */
+    terminate: () => Promise<void>;
 }
 
 /**
@@ -1059,9 +1106,8 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
         defaultViewport: null,
     });
 
-    // Reuse existing page or create new one if needed
-    const pages = await browser.pages();
-    const page = pages.length > 0 ? pages[0] : await browser.newPage();
+    // Always create NEW page for this session (session isolation)
+    const page = await browser.newPage();
 
     // Apply anti-detect patches
     await patchPage(page, {
@@ -1087,11 +1133,8 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
         await client.send('Emulation.setTimezoneOverride', { timezoneId: timezone });
     }
 
-    // Navigate to trigger the scripts (only if page is blank)
-    const currentUrl = page.target().url();
-    if (!currentUrl || currentUrl === 'about:blank' || currentUrl.startsWith('data:text/html')) {
-        await page.goto('data:text/html,<html><body></body></html>');
-    }
+    // Navigate to trigger the scripts
+    await page.goto('data:text/html,<html><body></body></html>');
 
     const session = {
         id: sessionId,
@@ -1101,14 +1144,26 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
 
     console.log(`[browser-profiles] Session created: ${sessionId} (${temporary ? 'temporary' : 'persistent'})`);
 
-    // Cleanup function
-    const close = async () => {
+    // Close function - by default only closes this session's page
+    const close = async (closeOptions?: { terminate?: boolean }) => {
         try {
-            await browser.close();
-            console.log(`[browser-profiles] Session closed: ${sessionId}`);
+            if (closeOptions?.terminate) {
+                // Kill the entire browser
+                await browser.close();
+                console.log(`[browser-profiles] Session terminated: ${sessionId}`);
+            } else {
+                // Only close this session's page
+                await page.close().catch(() => { });
+                console.log(`[browser-profiles] Session page closed: ${sessionId}`);
+            }
         } catch {
             // Ignore close errors
         }
+    };
+
+    // Terminate function - kills the browser entirely
+    const terminate = async () => {
+        await close({ terminate: true });
     };
 
     return {
@@ -1116,5 +1171,6 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
         page,
         session,
         close,
+        terminate,
     };
 }
