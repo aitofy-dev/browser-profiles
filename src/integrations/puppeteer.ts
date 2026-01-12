@@ -261,12 +261,45 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         timeout: options.timeout,
     });
 
-    // Connect Puppeteer
-    const browser: PuppeteerBrowser = await puppeteer.connect({
-        browserWSEndpoint: launch.wsEndpoint,
-        defaultViewport: options.defaultViewport ?? null,
-        slowMo: options.slowMo,
-    });
+    // Connect Puppeteer (with retry on connection failure)
+    let browser: PuppeteerBrowser;
+    try {
+        browser = await puppeteer.connect({
+            browserWSEndpoint: launch.wsEndpoint,
+            defaultViewport: options.defaultViewport ?? null,
+            slowMo: options.slowMo,
+        });
+    } catch (connectError: any) {
+        // Connection failed - browser might have crashed between detection and connection
+        // Force close and retry with fresh launch
+        console.log(`[browser-profiles] ⚠️ Connection failed (${connectError?.code || connectError?.message}), retrying with fresh browser...`);
+
+        try {
+            await launch.close();
+        } catch {
+            // Ignore close errors
+        }
+
+        // Force new launch by calling again (lock file was deleted by close())
+        const freshLaunch = await profiles.launch(profile.id, {
+            headless: options.headless,
+            chromePath: options.chromePath,
+            args: options.args,
+            extensions: options.extensions,
+            defaultViewport: options.defaultViewport,
+            slowMo: options.slowMo,
+            timeout: options.timeout,
+        });
+
+        // Update launch reference
+        Object.assign(launch, freshLaunch);
+
+        browser = await puppeteer.connect({
+            browserWSEndpoint: freshLaunch.wsEndpoint,
+            defaultViewport: options.defaultViewport ?? null,
+            slowMo: options.slowMo,
+        });
+    }
 
     // Helper to inject fingerprint protection scripts into a page
     // IMPORTANT: Must use Puppeteer's native evaluateOnNewDocument, NOT CDP session!
@@ -524,12 +557,41 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
         timeout: options.timeout,
     });
 
-    // Connect Puppeteer
-    const browser: PuppeteerBrowser = await puppeteer.connect({
-        browserWSEndpoint: launch.wsEndpoint,
-        defaultViewport: options.defaultViewport ?? null,
-        slowMo: options.slowMo,
-    });
+    // Connect Puppeteer (with retry on connection failure)
+    let browser: PuppeteerBrowser;
+    try {
+        browser = await puppeteer.connect({
+            browserWSEndpoint: launch.wsEndpoint,
+            defaultViewport: options.defaultViewport ?? null,
+            slowMo: options.slowMo,
+        });
+    } catch (connectError: any) {
+        console.log(`[browser-profiles] ⚠️ Connection failed (${connectError?.code || connectError?.message}), retrying with fresh browser...`);
+
+        try {
+            await launch.close();
+        } catch {
+            // Ignore close errors
+        }
+
+        const freshLaunch = await profiles.launch(profile.id, {
+            headless: options.headless,
+            chromePath: options.chromePath,
+            args: options.args,
+            extensions: options.extensions,
+            defaultViewport: options.defaultViewport,
+            slowMo: options.slowMo,
+            timeout: options.timeout,
+        });
+
+        Object.assign(launch, freshLaunch);
+
+        browser = await puppeteer.connect({
+            browserWSEndpoint: freshLaunch.wsEndpoint,
+            defaultViewport: options.defaultViewport ?? null,
+            slowMo: options.slowMo,
+        });
+    }
 
     // Always create NEW page for this session (session isolation)
     const page = await browser.newPage();

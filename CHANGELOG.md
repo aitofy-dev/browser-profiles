@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.8] - 2026-01-12
+
+### Fixed
+
+- **Connection retry on stale browser** ⚡
+  - If puppeteer.connect() fails with ECONNREFUSED, automatically retries with a fresh browser launch
+  - Handles race condition where browser crashes between detection and connection
+  - Improved `tryConnectExisting()` to not rely on PID check alone (OS can reuse PIDs)
+  - Better error handling and logging for connection failures
+
+  ```
+  [browser-profiles] ⚠️ Connection failed (ECONNREFUSED), retrying with fresh browser...
+  Chrome launched on port 54000, PID: 12345
+  ```
+
 ## [0.2.7] - 2026-01-12
 
 ### Added

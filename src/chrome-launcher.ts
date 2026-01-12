@@ -106,22 +106,29 @@ async function tryConnectExisting(lockInfo: BrowserLockInfo): Promise<{
     pid: number;
     port: number;
 } | null> {
-    // First check if process is running
-    if (!isProcessRunning(lockInfo.pid)) {
-        return null;
-    }
-
     // Try to fetch browser info to verify it's responsive
+    // Note: Don't trust PID check alone - OS can reuse PIDs
     try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+
         const response = await fetch(`http://localhost:${lockInfo.port}/json/version`, {
-            signal: AbortSignal.timeout(2000), // 2 second timeout
+            signal: controller.signal,
         });
 
+        clearTimeout(timeoutId);
+
         if (!response.ok) {
+            console.log(`[browser-profiles] Browser at port ${lockInfo.port} returned status ${response.status}`);
             return null;
         }
 
         const data = await response.json() as { webSocketDebuggerUrl: string };
+
+        if (!data.webSocketDebuggerUrl) {
+            console.log(`[browser-profiles] Browser at port ${lockInfo.port} has no wsEndpoint`);
+            return null;
+        }
 
         // Return the current wsEndpoint (might be different from lock file if browser restarted)
         return {
@@ -129,7 +136,13 @@ async function tryConnectExisting(lockInfo: BrowserLockInfo): Promise<{
             pid: lockInfo.pid,
             port: lockInfo.port,
         };
-    } catch {
+    } catch (error: any) {
+        // ECONNREFUSED, timeout, or any other error means browser is not running
+        if (error?.code === 'ECONNREFUSED' || error?.name === 'AbortError') {
+            // Expected - browser is not running
+        } else {
+            console.log(`[browser-profiles] Error checking browser at port ${lockInfo.port}:`, error?.message || error);
+        }
         return null;
     }
 }
