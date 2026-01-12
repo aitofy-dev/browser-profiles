@@ -5,30 +5,40 @@
 import type { StoredProfile, LaunchOptions, LaunchResult, ProxyConfig, ProfileConfig } from '../types';
 import { BrowserProfiles } from '../profile-manager';
 
-/**
- * Type for Puppeteer Browser (to avoid hard dependency)
- */
-interface PuppeteerBrowser {
-    newPage(): Promise<PuppeteerPage>;
-    close(): Promise<void>;
-    disconnect(): void;
-    pages(): Promise<PuppeteerPage[]>;
-    wsEndpoint(): string;
-    on(event: string, callback: (...args: any[]) => void): void;
-    target(): { createCDPSession(): Promise<any> };
-}
+// ============================================================================
+// NATIVE TYPE RE-EXPORTS
+// These provide FULL Puppeteer API access (setRequestInterception, on('request'), etc.)
+// ============================================================================
 
-interface PuppeteerPage {
-    goto(url: string, options?: any): Promise<any>;
-    close(): Promise<void>;
-    evaluate<T>(fn: () => T): Promise<T>;
-    evaluateOnNewDocument(fn: (...args: any[]) => void, ...args: any[]): Promise<void>;
-    setViewport(viewport: { width: number; height: number }): Promise<void>;
-    screenshot(options?: { path?: string; fullPage?: boolean }): Promise<Buffer>;
-    target(): { url(): string };
-    authenticate(credentials: { username: string; password: string }): Promise<void>;
-    createCDPSession?(): Promise<any>;
-}
+/**
+ * Re-export native Puppeteer Page type for full API access
+ * This includes ALL Puppeteer Page methods:
+ * - setRequestInterception()
+ * - on('request', callback)
+ * - on('response', callback)
+ * - cookies()
+ * - setCookie()
+ * - waitForSelector()
+ * - And many more...
+ */
+export type { Page as PuppeteerPage } from 'puppeteer-core';
+
+/**
+ * Re-export native Puppeteer Browser type for full API access
+ */
+export type { Browser as PuppeteerBrowser } from 'puppeteer-core';
+
+/**
+ * Re-export commonly used Puppeteer types
+ */
+export type { HTTPRequest, HTTPResponse, Cookie } from 'puppeteer-core';
+
+// Import types for internal use
+import type { Page as PuppeteerPageType, Browser as PuppeteerBrowserType } from 'puppeteer-core';
+
+// Create internal aliases (these are used throughout this file)
+type PuppeteerBrowser = PuppeteerBrowserType;
+type PuppeteerPage = PuppeteerPageType;
 
 /**
  * Options for withPuppeteer

@@ -1,6 +1,6 @@
 {
     "name": "@aitofy/browser-profiles",
-    "version": "0.2.4",
+    "version": "0.2.5",
     "description": "Self-hosted anti-detect browser profiles. Open-source AdsPower alternative for Puppeteer & Playwright.",
     "keywords": [
         "antidetect",
@@ -102,6 +102,7 @@
     "devDependencies": {
         "@types/chrome-remote-interface": "^0.33.0",
         "@types/node": "^20.10.0",
+        "playwright": "^1.40.0",
         "puppeteer-core": "^24.8.0",
         "tsup": "^8.0.1",
         "typescript": "^5.3.0",

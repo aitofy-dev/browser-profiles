@@ -5,28 +5,49 @@
 import type { StoredProfile, LaunchOptions, LaunchResult, ProxyConfig, ProfileConfig } from '../types';
 import { BrowserProfiles } from '../profile-manager';
 
+// ============================================================================
+// NATIVE TYPE RE-EXPORTS
+// These provide FULL Playwright API access (route, on('request'), reload, etc.)
+// ============================================================================
+
 /**
- * Playwright types (to avoid hard dependency)
+ * Re-export native Playwright Page type for full API access
+ * This includes ALL Playwright Page methods:
+ * - route() for request interception
+ * - on('request', callback)
+ * - reload()
+ * - waitForTimeout()
+ * - screenshot()
+ * - And many more...
  */
-interface PlaywrightBrowser {
-    newPage(): Promise<PlaywrightPage>;
-    newContext(options?: any): Promise<PlaywrightContext>;
-    close(): Promise<void>;
-    contexts(): PlaywrightContext[];
-}
+export type { Page as PlaywrightPage } from 'playwright';
 
-interface PlaywrightContext {
-    newPage(): Promise<PlaywrightPage>;
-    close(): Promise<void>;
-    pages(): PlaywrightPage[];
-}
+/**
+ * Re-export native Playwright Browser type for full API access
+ */
+export type { Browser as PlaywrightBrowser } from 'playwright';
 
-interface PlaywrightPage {
-    goto(url: string, options?: any): Promise<any>;
-    close(): Promise<void>;
-    evaluate<T>(fn: () => T): Promise<T>;
-    setViewportSize(size: { width: number; height: number }): Promise<void>;
-}
+/**
+ * Re-export native Playwright BrowserContext type
+ */
+export type { BrowserContext as PlaywrightContext } from 'playwright';
+
+/**
+ * Re-export commonly used Playwright types
+ */
+export type { Request as PlaywrightRequest, Response as PlaywrightResponse, Route } from 'playwright';
+
+// Import types for internal use
+import type {
+    Page as PlaywrightPageType,
+    Browser as PlaywrightBrowserType,
+    BrowserContext as PlaywrightContextType
+} from 'playwright';
+
+// Create internal aliases (used throughout this file)
+type PlaywrightBrowser = PlaywrightBrowserType;
+type PlaywrightContext = PlaywrightContextType;
+type PlaywrightPage = PlaywrightPageType;
 
 /**
  * Options for withPlaywright

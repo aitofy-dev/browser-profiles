@@ -146,7 +146,23 @@ export type {
     PatchPageOptions,
     CreateSessionOptions,
     SessionResult,
+    // v0.2.5: Native type re-exports for full API access
+    PuppeteerPage,
+    PuppeteerBrowser,
+    HTTPRequest,
+    HTTPResponse,
+    Cookie,
 } from './integrations/puppeteer';
 
+// Playwright type re-exports (for users who import from main entry)
+export type {
+    PlaywrightPage,
+    PlaywrightBrowser,
+    PlaywrightContext,
+    PlaywrightRequest,
+    PlaywrightResponse,
+    Route,
+} from './integrations/playwright';
+
 // Version
-export const VERSION = '0.2.3';
+export const VERSION = '0.2.5';

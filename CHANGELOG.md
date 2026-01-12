@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-01-12
+
+### Added
+
+- **Native Type Re-exports** - Full Puppeteer/Playwright API access! 🎉
+  - `PuppeteerPage`, `PuppeteerBrowser`, `HTTPRequest`, `HTTPResponse`, `Cookie` re-exported from `puppeteer-core`
+  - `PlaywrightPage`, `PlaywrightBrowser`, `PlaywrightContext`, `PlaywrightRequest`, `PlaywrightResponse`, `Route` re-exported from `playwright`
+  - No more TypeScript errors when using `setRequestInterception()`, `on('request')`, `cookies()`, `route()`, etc.
+  
+  ```typescript
+  // Before v0.2.5: Type errors!
+  const { page } = await withPuppeteer({ profile: 'my-profile' });
+  await page.setRequestInterception(true);  // ❌ Property does not exist
+  
+  // v0.2.5+: Full API access!
+  const { page } = await withPuppeteer({ profile: 'my-profile' });
+  await page.setRequestInterception(true);  // ✅ Works!
+  page.on('request', (req) => { ... });     // ✅ Works!
+  const cookies = await page.cookies();     // ✅ Works!
+  ```
+
+### Changed
+
+- `playwright` added to devDependencies for type declarations
+
+---
+
 ## [0.2.4] - 2026-01-12
 
 ### Fixed
@@ -14,6 +41,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Prevents duplicate empty pages from appearing on browser launch
   - Only creates a new page if no pages exist yet
   - Better resource management and cleaner user experience
+
+## 📝 Known Issues (Historical)
+
+<details>
+<summary>Simplified Page Types (v0.2.0 - v0.2.4) - ✅ RESOLVED in v0.2.5</summary>
+
+**Issue:** Current `PuppeteerPage` and `PlaywrightPage` type definitions are simplified interfaces, missing commonly used APIs. This causes TypeScript errors when users try to use full Puppeteer/Playwright APIs.
+
+**Missing APIs:**
+
+| `PuppeteerPage` | `PlaywrightPage` |
+|-----------------|------------------|
+| `setRequestInterception()` | `on('request', callback)` |
+| `on('request', callback)` | `waitForTimeout()` |
+| `on('response', callback)` | `reload()` |
+| `cookies(...urls)` | `route()` for request interception |
+| `setCookie(...cookies)` | `screenshot()` |
+| `title()` | `title()` |
+| `content()` | `content()` |
+| `waitForSelector()` | `waitForSelector()` |
+
+**Resolution:** Fixed in v0.2.5 by re-exporting native types from `puppeteer-core` and `playwright`.
+
+</details>
+
+---
 
 ## [0.2.3] - 2026-01-09
 

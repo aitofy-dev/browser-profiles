@@ -14,5 +14,5 @@ export default defineConfig({
     splitting: false,
     sourcemap: true,
     minify: false,
-    external: ['puppeteer', 'puppeteer-core', 'playwright'],
+    external: ['puppeteer', 'puppeteer-core', 'rebrowser-puppeteer-core', 'playwright', 'playwright-core'],
 });

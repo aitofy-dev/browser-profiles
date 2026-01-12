@@ -594,6 +594,67 @@ const profiles = new BrowserProfiles({
 - Optional cloud sync with end-to-end encryption
 - Only you (or people you share the key with) can decrypt
 
+## 🆕 v0.2.5: Full Type Support
+
+### Native Type Re-exports
+
+Starting from v0.2.5, `PuppeteerPage` and `PlaywrightPage` are **native types** re-exported from `puppeteer-core` and `playwright`. You now have access to ALL APIs directly:
+
+```typescript
+import { withPuppeteer, PuppeteerPage } from '@aitofy/browser-profiles';
+
+const { page, close } = await withPuppeteer({ profile: 'my-profile' });
+
+// ✅ Full API access - no workarounds needed!
+await page.setRequestInterception(true);
+page.on('request', (req) => {
+    if (req.resourceType() === 'image') {
+        req.abort();
+    } else {
+        req.continue();
+    }
+});
+
+const cookies = await page.cookies();
+await page.setCookie({ name: 'session', value: '123', domain: '.example.com' });
+
+await close();
+```
+
+**For Playwright:**
+
+```typescript
+import { withPlaywright, PlaywrightPage } from '@aitofy/browser-profiles';
+
+const { page, close } = await withPlaywright({ profile: 'my-profile' });
+
+// ✅ Full Playwright API!
+await page.route('**/*', (route) => {
+    if (route.request().resourceType() === 'image') {
+        route.abort();
+    } else {
+        route.continue();
+    }
+});
+
+await page.reload();
+await page.waitForTimeout(1000);
+
+await close();
+```
+
+### Exported Types
+
+All commonly used types are re-exported for convenience:
+
+| Puppeteer Types | Playwright Types |
+|-----------------|------------------|
+| `PuppeteerPage` | `PlaywrightPage` |
+| `PuppeteerBrowser` | `PlaywrightBrowser` |
+| `HTTPRequest` | `PlaywrightContext` |
+| `HTTPResponse` | `PlaywrightRequest` |
+| `Cookie` | `PlaywrightResponse`, `Route` |
+
 ## 🤝 Contributing
 
 Contributions are welcome! Please read our [Contributing Guide](https://github.com/aitofy-dev/browser-profiles/blob/main/CONTRIBUTING.md).
