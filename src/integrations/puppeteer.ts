@@ -437,15 +437,14 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         }
     });
 
-    // Always create NEW page for this session (session isolation)
-    // This ensures each session has its own page, even when reconnecting to existing browser
-    const page = await browser.newPage();
+    // Reuse existing page or create new one if needed
+    // This prevents duplicate empty pages from appearing
+    const pages = await browser.pages();
+    const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
-    // Inject scripts into the new page
+    // Inject scripts into the page
     await injectProtectionScripts(page);
-
-    // Navigate to trigger the scripts
-    await page.goto('data:text/html,<html><body></body></html>');
+    // Note: evaluateOnNewDocument scripts will run on first user navigation
 
     // Close function - by default only closes this session's page
     const close = async (options?: CloseOptions) => {
@@ -531,8 +530,9 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
         slowMo: options.slowMo,
     });
 
-    // Always create NEW page for this session (session isolation)
-    const page = await browser.newPage();
+    // Reuse existing page or create new one if needed
+    const pages = await browser.pages();
+    const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
     // Inject fingerprint protection scripts
     const fpConfig = {
@@ -604,9 +604,7 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
             }
         })();
     `);
-
-    // Navigate to trigger the scripts
-    await page.goto('data:text/html,<html><body></body></html>');
+    // Note: evaluateOnNewDocument scripts will run on first user navigation
 
     // Close function - by default only closes this session's page
     const close = async (closeOptions?: CloseOptions) => {
@@ -1132,9 +1130,8 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
         const client = await (page as any).createCDPSession?.() || await browser.target().createCDPSession();
         await client.send('Emulation.setTimezoneOverride', { timezoneId: timezone });
     }
+    // Note: evaluateOnNewDocument scripts will run on first user navigation
 
-    // Navigate to trigger the scripts
-    await page.goto('data:text/html,<html><body></body></html>');
 
     const session = {
         id: sessionId,
