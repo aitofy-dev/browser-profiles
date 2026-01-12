@@ -325,6 +325,21 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
         }
     }
 
+    // Clean up stale Chrome lock files that prevent launch
+    // These files are created by Chrome and left behind if Chrome crashes
+    const staleFiles = ['SingletonLock', 'SingletonCookie', 'SingletonSocket'];
+    for (const file of staleFiles) {
+        const filePath = path.join(userDataDir, file);
+        if (fs.existsSync(filePath)) {
+            try {
+                fs.unlinkSync(filePath);
+                console.log(`[browser-profiles] 🧹 Cleaned up stale ${file}`);
+            } catch {
+                // Ignore errors - file might be in use
+            }
+        }
+    }
+
     // Get Chrome path
     const executablePath = getChromePath(chromePath);
 
@@ -427,6 +442,9 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
         }
     }
 
+    console.log(`[browser-profiles] 🚀 Launching Chrome with executablePath: ${executablePath}`);
+    console.log(`[browser-profiles] 📁 User data dir: ${userDataDir}`);
+
     try {
         chromeProcess = await chromeLauncher.launch({
             chromePath: executablePath,
@@ -437,7 +455,9 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
                 TZ: timezone,
             },
         });
+        console.log(`[browser-profiles] ✅ Chrome process started, port: ${chromeProcess.port}, pid: ${chromeProcess.pid}`);
     } catch (error) {
+        console.error(`[browser-profiles] ❌ Chrome launch failed:`, error);
         // Cleanup proxy if launch failed
         if (anonymizedProxyUrl) {
             await proxyChain.closeAnonymizedProxy(anonymizedProxyUrl, true).catch(() => { });
@@ -447,8 +467,32 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
 
     console.log(`Chrome launched on port ${chromeProcess.port}, PID: ${chromeProcess.pid}`);
 
-    // Connect via CDP
-    const client = await (CDP as any)({ port: chromeProcess.port });
+    // Connect via CDP with retry (Chrome needs time to initialize debugging port)
+    let client: any;
+    const cdpMaxRetries = 10;
+    const cdpRetryDelay = 300; // ms
+
+    for (let i = 0; i < cdpMaxRetries; i++) {
+        try {
+            client = await (CDP as any)({ port: chromeProcess.port });
+            break;
+        } catch (cdpError: any) {
+            if (i === cdpMaxRetries - 1) {
+                // Last retry failed, cleanup and throw
+                console.error(`[browser-profiles] Failed to connect CDP after ${cdpMaxRetries} retries`);
+                try {
+                    await chromeProcess.kill();
+                    if (anonymizedProxyUrl) {
+                        await proxyChain.closeAnonymizedProxy(anonymizedProxyUrl, true).catch(() => { });
+                    }
+                } catch { }
+                throw cdpError;
+            }
+            // Wait and retry
+            await new Promise(r => setTimeout(r, cdpRetryDelay));
+        }
+    }
+
     const { Network, Emulation, Page } = client;
 
     // Enable network and inject anti-fingerprint scripts
@@ -519,9 +563,39 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
         }
     }
 
-    // Get WebSocket endpoint
-    const response = await fetch(`http://localhost:${chromeProcess.port}/json/version`);
-    const versionInfo = (await response.json()) as { webSocketDebuggerUrl: string };
+    // Get WebSocket endpoint with retry (browser needs time to fully initialize)
+    let versionInfo: { webSocketDebuggerUrl: string } | null = null;
+    const maxRetries = 10;
+    const retryDelay = 200; // ms
+
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            const response = await fetch(`http://localhost:${chromeProcess.port}/json/version`);
+            if (response.ok) {
+                versionInfo = await response.json() as { webSocketDebuggerUrl: string };
+                if (versionInfo?.webSocketDebuggerUrl) {
+                    break;
+                }
+            }
+        } catch {
+            // Browser not ready yet, wait and retry
+        }
+
+        if (i < maxRetries - 1) {
+            await new Promise(r => setTimeout(r, retryDelay));
+        }
+    }
+
+    if (!versionInfo?.webSocketDebuggerUrl) {
+        // Cleanup on failure
+        try {
+            await chromeProcess.kill();
+            if (anonymizedProxyUrl) {
+                await proxyChain.closeAnonymizedProxy(anonymizedProxyUrl, true).catch(() => { });
+            }
+        } catch { }
+        throw new Error('Failed to get browser WebSocket endpoint after multiple retries');
+    }
 
     // Track running browser
     runningBrowsers.set(profile.id, {

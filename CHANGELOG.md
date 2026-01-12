@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.9] - 2026-01-12
+
+### Fixed
+
+- **Chrome stale lock file cleanup** 🔓
+  - Auto-cleans `SingletonLock`, `SingletonCookie`, `SingletonSocket` files before launching
+  - These files are left behind when Chrome crashes and prevent new instances from starting
+  - Fixes "Failed to create ProcessSingleton" errors
+  - Added CDP connection retry with delay (300ms, 10 retries)
+  - Added wsEndpoint fetch retry with delay (200ms, 10 retries)
+  - Better logging during launch sequence for debugging
+
+  ```
+  [browser-profiles] 🧹 Cleaned up stale SingletonLock
+  [browser-profiles] ✅ Chrome process started, port: 54000, pid: 12345
+  ```
+
 ## [0.2.8] - 2026-01-12
 
 ### Fixed
