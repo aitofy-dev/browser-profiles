@@ -46,6 +46,21 @@ type PuppeteerPage = PuppeteerPageType;
 export interface WithPuppeteerOptions extends LaunchOptions {
     /**
      * Profile ID or name to launch
+     * 
+     * Accepts:
+     * - Profile ID (e.g., 'abc123', 'google-main')
+     * - Profile name (e.g., 'Google Account', 'My Profile')
+     * 
+     * The function will first try to find by ID, then by name.
+     * 
+     * @example
+     * ```typescript
+     * // Launch by custom ID
+     * await withPuppeteer({ profile: 'google-main' });
+     * 
+     * // Launch by name
+     * await withPuppeteer({ profile: 'Google Account' });
+     * ```
      */
     profile: string;
 
@@ -237,14 +252,8 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         storagePath: options.storagePath,
     });
 
-    // Find profile by ID or name
-    let profile = await profiles.get(options.profile);
-
-    if (!profile) {
-        // Try to find by name
-        const allProfiles = await profiles.list();
-        profile = allProfiles.find((p) => p.name === options.profile) || null;
-    }
+    // Find profile by ID or name (uses getByIdOrName for case-insensitive name matching)
+    const profile = await profiles.getByIdOrName(options.profile);
 
     if (!profile) {
         throw new Error(`Profile not found: ${options.profile}`);

@@ -30,6 +30,20 @@ function generateId(): string {
 }
 
 /**
+ * Validate custom profile ID
+ * - Must be alphanumeric with optional hyphens and underscores
+ * - Length between 1 and 64 characters
+ */
+function validateProfileId(id: string): boolean {
+    if (!id || id.length === 0 || id.length > 64) {
+        return false;
+    }
+    // Allow alphanumeric, hyphen, underscore, period
+    const validPattern = /^[a-zA-Z0-9_-]+$/;
+    return validPattern.test(id);
+}
+
+/**
  * BrowserProfiles - Manage anti-detect browser profiles
  *
  * @example
@@ -101,9 +115,44 @@ export class BrowserProfiles {
 
     /**
      * Create a new browser profile
+     * 
+     * @param config - Profile configuration
+     * @param config.id - Optional custom ID. If provided, must be alphanumeric with hyphens/underscores (1-64 chars)
+     * @throws Error if custom ID is invalid or already exists
+     * 
+     * @example
+     * ```typescript
+     * // With auto-generated ID
+     * const profile = await profiles.create({ name: 'My Profile' });
+     * 
+     * // With custom ID
+     * const profile = await profiles.create({ 
+     *   id: 'google-main',
+     *   name: 'Google Account' 
+     * });
+     * ```
      */
     async create(config: ProfileConfig): Promise<StoredProfile> {
-        const id = config.id || generateId();
+        let id: string;
+
+        if (config.id) {
+            // Validate custom ID
+            if (!validateProfileId(config.id)) {
+                throw new Error(
+                    `Invalid profile ID: "${config.id}". ` +
+                    'ID must be 1-64 characters, alphanumeric with hyphens and underscores only.'
+                );
+            }
+            // Check if ID already exists
+            const existing = await this.get(config.id);
+            if (existing) {
+                throw new Error(`Profile with ID "${config.id}" already exists.`);
+            }
+            id = config.id;
+        } else {
+            id = generateId();
+        }
+
         const now = Date.now();
 
         const profile: StoredProfile = {
@@ -155,6 +204,44 @@ export class BrowserProfiles {
         } catch {
             return null;
         }
+    }
+
+    /**
+     * Get a profile by name
+     * Returns the first profile matching the name (case-insensitive)
+     * 
+     * @example
+     * ```typescript
+     * const profile = await profiles.getByName('Google Account');
+     * if (profile) {
+     *   const { wsEndpoint } = await profiles.launch(profile.id);
+     * }
+     * ```
+     */
+    async getByName(name: string): Promise<StoredProfile | null> {
+        const allProfiles = await this.list();
+        const lowerName = name.toLowerCase();
+        return allProfiles.find((p) => p.name.toLowerCase() === lowerName) || null;
+    }
+
+    /**
+     * Get a profile by ID or name
+     * First tries to find by ID, then by name
+     * 
+     * @example
+     * ```typescript
+     * // Works with both ID and name
+     * const profile = await profiles.getByIdOrName('google-main');
+     * const profile2 = await profiles.getByIdOrName('Google Account');
+     * ```
+     */
+    async getByIdOrName(idOrName: string): Promise<StoredProfile | null> {
+        // First try by ID
+        const byId = await this.get(idOrName);
+        if (byId) return byId;
+
+        // Then try by name
+        return this.getByName(idOrName);
     }
 
     /**
@@ -291,6 +378,41 @@ export class BrowserProfiles {
         this.runningBrowsers.set(profileId, result);
 
         return result;
+    }
+
+    /**
+     * Launch a browser by profile name
+     * 
+     * @example
+     * ```typescript
+     * const { wsEndpoint, close } = await profiles.launchByName('Google Account');
+     * ```
+     */
+    async launchByName(name: string, options?: LaunchOptions): Promise<LaunchResult> {
+        const profile = await this.getByName(name);
+        if (!profile) {
+            throw new Error(`Profile not found with name: ${name}`);
+        }
+        return this.launch(profile.id, options);
+    }
+
+    /**
+     * Launch a browser by profile ID or name
+     * First tries to find by ID, then by name
+     * 
+     * @example
+     * ```typescript
+     * // Works with both ID and name
+     * const { wsEndpoint } = await profiles.launchByIdOrName('google-main');
+     * const { wsEndpoint } = await profiles.launchByIdOrName('Google Account');
+     * ```
+     */
+    async launchByIdOrName(idOrName: string, options?: LaunchOptions): Promise<LaunchResult> {
+        const profile = await this.getByIdOrName(idOrName);
+        if (!profile) {
+            throw new Error(`Profile not found: ${idOrName}`);
+        }
+        return this.launch(profile.id, options);
     }
 
     /**

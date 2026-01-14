@@ -133,6 +133,42 @@ const { wsEndpoint, close } = await profiles.launch(profile.id);
 await close();
 ```
 
+### 🆕 Custom Profile IDs
+
+You can define your own custom profile IDs instead of using auto-generated ones:
+
+```typescript
+// Create profile with custom ID
+const profile = await profiles.create({
+  id: 'google-main',      // Custom ID (alphanumeric + hyphen/underscore)
+  name: 'Google Account',
+});
+
+// Launch by custom ID directly
+const { wsEndpoint } = await profiles.launch('google-main');
+```
+
+**Custom ID rules:**
+- 1-64 characters
+- Alphanumeric with hyphens and underscores only (a-z, A-Z, 0-9, -, _)
+- Must be unique
+
+### 🆕 Launch by Profile Name
+
+You can now launch browsers using the profile **name** instead of ID:
+
+```typescript
+// Create profile
+await profiles.create({ name: 'Facebook Account' });
+
+// Launch by name (case-insensitive)
+const { wsEndpoint } = await profiles.launchByName('Facebook Account');
+
+// Or use launchByIdOrName (works with both ID and name)
+await profiles.launchByIdOrName('google-main');     // By ID
+await profiles.launchByIdOrName('Facebook Account'); // By name
+```
+
 ### With Puppeteer
 
 ```typescript
@@ -389,12 +425,16 @@ const profiles = new BrowserProfiles({
 
 | Method | Description |
 |--------|-------------|
-| `create(config)` | Create a new profile |
+| `create(config)` | Create a new profile (supports custom ID via `config.id`) |
 | `get(id)` | Get profile by ID |
+| `getByName(name)` | Get profile by name (case-insensitive) |
+| `getByIdOrName(idOrName)` | Get profile by ID or name |
 | `list(options?)` | List all profiles |
 | `update(id, updates)` | Update profile |
 | `delete(id)` | Delete profile |
-| `launch(id, options?)` | Launch browser |
+| `launch(id, options?)` | Launch browser by profile ID |
+| `launchByName(name, options?)` | Launch browser by profile name |
+| `launchByIdOrName(idOrName, options?)` | Launch browser by ID or name |
 | `close(id)` | Close running browser |
 | `closeAll()` | Close all browsers |
 | `duplicate(id)` | Duplicate profile |
@@ -405,6 +445,7 @@ const profiles = new BrowserProfiles({
 
 ```typescript
 interface ProfileConfig {
+  id?: string;                     // Custom profile ID (auto-generated if omitted)
   name: string;                    // Profile name
   proxy?: ProxyConfig;             // Proxy settings
   timezone?: string;               // e.g., "America/New_York"

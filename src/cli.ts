@@ -65,6 +65,7 @@ program
 // Create profile
 // ============================================================================
 interface CreateOptions {
+    id?: string;
     proxy?: string;
     timezone?: string;
     language?: string;
@@ -74,6 +75,7 @@ interface CreateOptions {
 program
     .command('create <name>')
     .description('Create a new browser profile')
+    .option('-i, --id <id>', 'Custom profile ID (alphanumeric + hyphen/underscore, 1-64 chars)')
     .option('-p, --proxy <url>', 'Proxy URL (e.g., http://user:pass@host:port)')
     .option('-t, --timezone <tz>', 'Timezone (e.g., America/New_York)')
     .option('-l, --language <lang>', 'Language (e.g., en-US)')
@@ -94,6 +96,7 @@ program
             }
 
             const profile = await profiles.create({
+                id: options.id,
                 name,
                 proxy,
                 timezone: options.timezone,
@@ -112,7 +115,8 @@ program
             if (options.timezone) {
                 console.log(`Timezone: ${options.timezone}`);
             }
-            console.log(`\nLaunch with: browser-profiles open ${profile.id}\n`);
+            console.log(`\nLaunch with: browser-profiles open ${profile.id}`);
+            console.log(`        or: browser-profiles open "${profile.name}"\n`);
         } catch (error) {
             console.error('Error creating profile:', (error as Error).message);
             process.exit(1);
@@ -123,22 +127,22 @@ program
 // Delete profile
 // ============================================================================
 program
-    .command('delete <id>')
+    .command('delete <idOrName>')
     .alias('rm')
-    .description('Delete a browser profile')
+    .description('Delete a browser profile by ID or name')
     .option('-f, --force', 'Skip confirmation')
-    .action(async (id: string) => {
+    .action(async (idOrName: string) => {
         try {
-            const profile = await profiles.get(id);
+            const profile = await profiles.getByIdOrName(idOrName);
             if (!profile) {
-                console.error(`Profile not found: ${id}`);
+                console.error(`Profile not found: ${idOrName}`);
                 process.exit(1);
             }
 
-            const success = await profiles.delete(id);
+            const success = await profiles.delete(profile.id);
 
             if (success) {
-                console.log(`\n✅ Profile deleted: ${profile.name || id}\n`);
+                console.log(`\n✅ Profile deleted: ${profile.name || profile.id}\n`);
             } else {
                 console.error('Failed to delete profile');
                 process.exit(1);
@@ -153,14 +157,14 @@ program
 // Show profile info
 // ============================================================================
 program
-    .command('info <id>')
-    .description('Show profile details')
+    .command('info <idOrName>')
+    .description('Show profile details by ID or name')
     .option('-j, --json', 'Output as JSON')
-    .action(async (id: string, options: { json?: boolean }) => {
+    .action(async (idOrName: string, options: { json?: boolean }) => {
         try {
-            const profile = await profiles.get(id);
+            const profile = await profiles.getByIdOrName(idOrName);
             if (!profile) {
-                console.error(`Profile not found: ${id}`);
+                console.error(`Profile not found: ${idOrName}`);
                 process.exit(1);
             }
 
@@ -207,20 +211,20 @@ program
 // Open browser with profile
 // ============================================================================
 program
-    .command('open <id>')
-    .description('Open browser with a profile')
+    .command('open <idOrName>')
+    .description('Open browser with a profile (by ID or name)')
     .option('-h, --headless', 'Run in headless mode')
-    .action(async (id: string, options: { headless?: boolean }) => {
+    .action(async (idOrName: string, options: { headless?: boolean }) => {
         try {
-            const profile = await profiles.get(id);
+            const profile = await profiles.getByIdOrName(idOrName);
             if (!profile) {
-                console.error(`Profile not found: ${id}`);
+                console.error(`Profile not found: ${idOrName}`);
                 process.exit(1);
             }
 
-            console.log(`\n🚀 Launching browser for: ${profile.name || id}`);
+            console.log(`\n🚀 Launching browser for: ${profile.name || profile.id}`);
 
-            const result = await profiles.launch(id, {
+            const result = await profiles.launch(profile.id, {
                 headless: options.headless || false,
             });
 

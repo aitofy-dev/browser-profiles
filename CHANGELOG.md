@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.12] - 2026-01-14
+
+### Added
+
+- **Custom Profile IDs** 🆔
+  - Create profiles with your own custom IDs instead of auto-generated hex strings
+  - IDs must be 1-64 characters, alphanumeric with hyphens/underscores only
+  - Validation prevents invalid IDs and duplicates
+  
+  ```typescript
+  const profile = await profiles.create({
+    id: 'google-main',      // Custom ID!
+    name: 'Google Account',
+  });
+  
+  // Launch by custom ID
+  await profiles.launch('google-main');
+  ```
+
+- **Launch by Profile Name** 📛
+  - New methods to find and launch profiles by name (case-insensitive)
+  - `getByName(name)` - Find profile by name
+  - `getByIdOrName(idOrName)` - Find by ID first, then by name
+  - `launchByName(name, options?)` - Launch browser by profile name
+  - `launchByIdOrName(idOrName, options?)` - Launch by ID or name
+  
+  ```typescript
+  // Create profile
+  await profiles.create({ name: 'Facebook Account' });
+  
+  // Launch by name
+  await profiles.launchByName('Facebook Account');
+  
+  // Or use flexible method
+  await profiles.launchByIdOrName('Facebook Account'); // By name
+  await profiles.launchByIdOrName('google-main');      // By ID
+  ```
+
+- **CLI Improvements**
+  - `browser-profiles create <name> --id <custom-id>` - Create profile with custom ID
+  - `browser-profiles open <id-or-name>` - Open browser by ID or name
+  - `browser-profiles info <id-or-name>` - Show profile info by ID or name
+  - `browser-profiles delete <id-or-name>` - Delete profile by ID or name
+
+### Changed
+
+- `withPuppeteer()` now uses `getByIdOrName()` for cleaner profile lookup with case-insensitive name matching
+
 ## [0.2.10] - 2026-01-12
 
 ### Changed
