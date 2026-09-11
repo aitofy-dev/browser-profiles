@@ -76,6 +76,9 @@ export {
     AUDIO_PROTECTION_SCRIPT,
     getAllProtectionScripts,
     createNavigatorScript,
+    createWebGLScript,
+    createWorkerSpoofScript,
+    pickWebGLForPlatform,
     // v0.2.0: Fingerprint generation
     generateFingerprint,
     getFingerprintScripts,
@@ -85,6 +88,7 @@ export {
 export type {
     GenerateFingerprintOptions,
     GeneratedFingerprint,
+    WebGLSpoofConfig,
 } from './fingerprint';
 
 // User-Agent helpers (UA always matches the running Chrome's major version)

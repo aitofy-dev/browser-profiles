@@ -151,91 +151,159 @@ export const CANVAS_PROTECTION_SCRIPT = `
 `;
 
 /**
- * WebGL fingerprint protection script
- * Spoofs WebGL parameters and adds noise to buffer data
+ * WebGL vendor/renderer pair reported to pages
  */
-export const WEBGL_PROTECTION_SCRIPT = `
+export interface WebGLSpoofConfig {
+  vendor?: string;
+  renderer?: string;
+}
+
+const DEFAULT_WEBGL: Required<WebGLSpoofConfig> = {
+  vendor: 'Google Inc. (Intel)',
+  renderer: 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0)',
+};
+
+/**
+ * Build the WebGL protection script for a fixed vendor/renderer.
+ * Numeric parameters are derived from a PRNG seeded by the renderer string,
+ * so a profile reports the same values on every page load.
+ */
+export function createWebGLScript(config: WebGLSpoofConfig = {}): string {
+  const vendor = config.vendor || DEFAULT_WEBGL.vendor;
+  const renderer = config.renderer || DEFAULT_WEBGL.renderer;
+
+  return `
 (function() {
-  // Random helper
-  function randomItem(arr) {
-    return arr[Math.floor(Math.random() * arr.length)];
+  const VENDOR = ${JSON.stringify(vendor)};
+  const RENDERER = ${JSON.stringify(renderer)};
+
+  // mulberry32 seeded from the renderer string: stable values per profile
+  let seed = 0;
+  for (let i = 0; i < RENDERER.length; i++) seed = (seed * 31 + RENDERER.charCodeAt(i)) >>> 0;
+  function rand() {
+    seed = (seed + 0x6D2B79F5) >>> 0;
+    let t = seed;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   }
-  
+  function randomItem(arr) {
+    return arr[Math.floor(rand() * arr.length)];
+  }
+
   function randomPower(powers) {
     return Math.pow(2, randomItem(powers));
   }
-  
+
   function randomInt32(powers) {
     const n = randomPower(powers);
     return new Int32Array([n, n]);
   }
-  
+
   function randomFloat32(powers) {
     const n = randomPower(powers);
     return new Float32Array([1, n]);
   }
-  
+
+  // Values are picked once so repeated getParameter calls agree
+  const fixed = {
+    3379: randomPower([14, 15]), 34076: randomPower([14, 15]), 34024: randomPower([14, 15]),
+    36347: randomPower([12, 13]), 3386: randomInt32([13, 14, 15]),
+    33902: randomFloat32([0, 10, 11, 12, 13]), 33901: randomFloat32([0, 10, 11, 12, 13]),
+    3413: randomPower([1, 2, 3, 4]), 35660: randomPower([1, 2, 3, 4]), 35661: randomPower([4, 5, 6, 7, 8]),
+    34930: randomPower([1, 2, 3, 4]), 36349: randomPower([10, 11, 12, 13]),
+    7938: randomItem(["WebGL 1.0", "WebGL 1.0 (OpenGL ES 2.0 Chromium)"]),
+    35724: randomItem(["WebGL GLSL ES 1.0", "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"]),
+  };
+
   // Spoof getParameter
   function spoofGetParameter(proto) {
     const originalGetParameter = proto.getParameter;
-    
+
     proto.getParameter = function(pname) {
       // Spoof vendor/renderer strings
-      if (pname === 37445) return "Google Inc."; // UNMASKED_VENDOR_WEBGL
-      if (pname === 37446) return randomItem(["ANGLE (Intel, Intel(R) HD Graphics)", "ANGLE (NVIDIA, GeForce GTX 1080)", "ANGLE (AMD, Radeon RX 580)"]); // UNMASKED_RENDERER_WEBGL
+      if (pname === 37445) return VENDOR; // UNMASKED_VENDOR_WEBGL
+      if (pname === 37446) return RENDERER; // UNMASKED_RENDERER_WEBGL
       if (pname === 7936) return "WebKit"; // VENDOR
       if (pname === 7937) return "WebKit WebGL"; // RENDERER
-      if (pname === 7938) return randomItem(["WebGL 1.0", "WebGL 1.0 (OpenGL ES 2.0 Chromium)"]); // VERSION
-      if (pname === 35724) return randomItem(["WebGL GLSL ES 1.0", "WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)"]); // SHADING_LANGUAGE_VERSION
-      
-      // Spoof numeric parameters with randomized values
-      if (pname === 3379) return randomPower([14, 15]); // MAX_TEXTURE_SIZE
-      if (pname === 34076) return randomPower([14, 15]); // MAX_CUBE_MAP_TEXTURE_SIZE
-      if (pname === 34024) return randomPower([14, 15]); // MAX_RENDERBUFFER_SIZE
-      if (pname === 36347) return randomPower([12, 13]); // MAX_VARYING_VECTORS
       if (pname === 36348) return 30; // MAX_VERTEX_UNIFORM_VECTORS
-      if (pname === 3386) return randomInt32([13, 14, 15]); // MAX_VIEWPORT_DIMS
-      if (pname === 33902) return randomFloat32([0, 10, 11, 12, 13]); // ALIASED_LINE_WIDTH_RANGE
-      if (pname === 33901) return randomFloat32([0, 10, 11, 12, 13]); // ALIASED_POINT_SIZE_RANGE
-      if (pname === 3413) return randomPower([1, 2, 3, 4]); // MAX_TEXTURE_IMAGE_UNITS
-      if (pname === 35660) return randomPower([1, 2, 3, 4]); // MAX_VERTEX_TEXTURE_IMAGE_UNITS
-      if (pname === 35661) return randomPower([4, 5, 6, 7, 8]); // MAX_COMBINED_TEXTURE_IMAGE_UNITS
-      if (pname === 34930) return randomPower([1, 2, 3, 4]); // MAX_FRAGMENT_UNIFORM_VECTORS
-      if (pname === 36349) return randomPower([10, 11, 12, 13]); // MAX_VERTEX_ATTRIBS
-      
+      if (Object.prototype.hasOwnProperty.call(fixed, pname)) return fixed[pname];
+
       return originalGetParameter.call(this, pname);
     };
   }
-  
+
   // Add noise to buffer data
   function spoofBufferData(proto) {
     const originalBufferData = proto.bufferData;
-    
+
     proto.bufferData = function(target, data, usage) {
       if (data && data.length) {
-        const index = Math.floor(Math.random() * data.length);
+        const index = Math.floor(rand() * data.length);
         if (data[index] !== undefined) {
-          data[index] = data[index] + 0.1 * Math.random() * data[index];
+          data[index] = data[index] + 0.1 * rand() * data[index];
         }
       }
       return originalBufferData.call(this, target, data, usage);
     };
   }
-  
-  // Apply to WebGL contexts
+
+  // Apply to WebGL contexts (also present in workers via OffscreenCanvas)
   if (typeof WebGLRenderingContext !== 'undefined') {
     spoofGetParameter(WebGLRenderingContext.prototype);
     spoofBufferData(WebGLRenderingContext.prototype);
   }
-  
+
   if (typeof WebGL2RenderingContext !== 'undefined') {
     spoofGetParameter(WebGL2RenderingContext.prototype);
     spoofBufferData(WebGL2RenderingContext.prototype);
   }
-  
-  console.log('[browser-profiles] WebGL protection enabled');
 })();
 `;
+}
+
+/**
+ * WebGL fingerprint protection script with the default Intel/Windows renderer.
+ * Prefer createWebGLScript() with the profile's persisted vendor/renderer.
+ */
+export const WEBGL_PROTECTION_SCRIPT = createWebGLScript();
+
+/**
+ * Wrap Worker/SharedWorker so scripts started from the page run the same
+ * navigator/WebGL spoof before the real worker script.
+ *
+ * Limitation: the worker is started from a blob URL, so relative
+ * importScripts() inside the worker script and worker `location` differ from
+ * the original URL. Module workers and service workers are left untouched.
+ */
+export function createWorkerSpoofScript(workerPrelude: string): string {
+  return `
+(function() {
+  const PRELUDE = ${JSON.stringify(workerPrelude)};
+
+  function wrapWorker(Original) {
+    if (typeof Original !== 'function') return Original;
+
+    const Wrapped = function(url, options) {
+      if (options && options.type === 'module') return new Original(url, options);
+      let absolute;
+      try { absolute = new URL(url, location.href).href; } catch (e) { return new Original(url, options); }
+      const source = PRELUDE + '\\nimportScripts(' + JSON.stringify(absolute) + ');';
+      const blobUrl = URL.createObjectURL(new Blob([source], { type: 'application/javascript' }));
+      return new Original(blobUrl, options);
+    };
+
+    Wrapped.prototype = Original.prototype;
+    Object.defineProperty(Wrapped, 'name', { value: Original.name });
+    Wrapped.toString = function() { return Original.toString(); };
+    return Wrapped;
+  }
+
+  if (typeof self.Worker !== 'undefined') self.Worker = wrapWorker(self.Worker);
+  if (typeof self.SharedWorker !== 'undefined') self.SharedWorker = wrapWorker(self.SharedWorker);
+})();
+`;
+}
 
 /**
  * AudioContext fingerprint protection script
@@ -369,8 +437,11 @@ export function createNavigatorScript(config: {
 export function getAllProtectionScripts(options?: {
   webrtc?: boolean;
   canvas?: boolean;
-  webgl?: boolean;
+  /** true = default renderer, or a fixed vendor/renderer pair */
+  webgl?: boolean | WebGLSpoofConfig;
   audio?: boolean;
+  /** Re-apply navigator/WebGL spoof inside Worker and SharedWorker */
+  workers?: boolean;
   navigator?: {
     userAgent?: string;
     language?: string;
@@ -385,24 +456,45 @@ export function getAllProtectionScripts(options?: {
   const opts = {
     webrtc: true,
     canvas: true,
-    webgl: true,
+    webgl: true as boolean | WebGLSpoofConfig,
     audio: true,
+    workers: true,
     ...options,
   };
 
+  const webglScript = opts.webgl
+    ? createWebGLScript(typeof opts.webgl === 'object' ? opts.webgl : {})
+    : null;
+  const navigatorScript = opts.navigator ? createNavigatorScript(opts.navigator) : null;
+
   if (opts.webrtc) scripts.push(WEBRTC_PROTECTION_SCRIPT);
   if (opts.canvas) scripts.push(CANVAS_PROTECTION_SCRIPT);
-  if (opts.webgl) scripts.push(WEBGL_PROTECTION_SCRIPT);
+  if (webglScript) scripts.push(webglScript);
   if (opts.audio) scripts.push(AUDIO_PROTECTION_SCRIPT);
+  if (navigatorScript) scripts.push(navigatorScript);
 
-  if (opts.navigator) {
-    scripts.push(createNavigatorScript(opts.navigator));
+  if (opts.workers && (webglScript || navigatorScript)) {
+    scripts.push(createWorkerSpoofScript([navigatorScript, webglScript].filter(Boolean).join('\n\n')));
   }
 
   // Always add automation detection bypass
   scripts.push(AUTOMATION_BYPASS_SCRIPT);
 
   return scripts.join('\n\n');
+}
+
+/**
+ * Pick a WebGL vendor/renderer that matches a navigator.platform value
+ */
+export function pickWebGLForPlatform(platform: string | undefined): Required<WebGLSpoofConfig> {
+  const pool = platform?.startsWith('Mac')
+    ? WEBGL_RENDERERS.apple
+    : platform?.startsWith('Linux')
+      ? WEBGL_RENDERERS.linux
+      : [...WEBGL_RENDERERS.intel, ...WEBGL_RENDERERS.nvidia, ...WEBGL_RENDERERS.amd];
+  const renderer = pool[Math.floor(Math.random() * pool.length)];
+  const vendorName = renderer.match(/^ANGLE \(([^,]+),/)?.[1] ?? 'Google';
+  return { vendor: `Google Inc. (${vendorName})`, renderer };
 }
 
 /**
@@ -566,12 +658,6 @@ export const AUTOMATION_BYPASS_SCRIPT = `
   
   Object.defineProperty(navigator, 'plugins', {
     get: () => fakePlugins,
-    configurable: true
-  });
-  
-  // ===== LANGUAGES FIX =====
-  Object.defineProperty(navigator, 'languages', {
-    get: () => ['en-US', 'en'],
     configurable: true
   });
   
@@ -796,6 +882,11 @@ const WEBGL_RENDERERS = {
     'ANGLE (Apple, Apple M1 Pro, OpenGL 4.1)',
     'ANGLE (Apple, Apple M2, OpenGL 4.1)',
     'ANGLE (Apple, Apple M1 Max, OpenGL 4.1)',
+  ],
+  linux: [
+    'ANGLE (Intel, Mesa Intel(R) UHD Graphics 630 (CFL GT2), OpenGL 4.6)',
+    'ANGLE (Intel, Mesa Intel(R) Iris(R) Xe Graphics (TGL GT2), OpenGL 4.6)',
+    'ANGLE (AMD, AMD Radeon RX 6600 (radeonsi, navi23, LLVM 15.0.7), OpenGL 4.6)',
   ],
 };
 

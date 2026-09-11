@@ -20,7 +20,7 @@ import {
  */
 async function getRunningChromeVersion(client: any): Promise<ChromeVersion> {
     try {
-        const { product } = await client.Browser.getVersion();
+        const { product } = await client.send('Browser.getVersion');
         const parsed = parseChromeVersion(String(product ?? ''));
         if (parsed) return parsed;
     } catch {
@@ -291,6 +291,100 @@ export async function autoDetectTimezone(proxy: ProxyConfig): Promise<string> {
     return 'America/New_York'; // Default fallback
 }
 
+function buildProtectionScript(profile: StoredProfile): string {
+    const fp = profile.fingerprint;
+    return getAllProtectionScripts({
+        webrtc: true,
+        canvas: true,
+        webgl: fp?.webgl ?? true,
+        audio: true,
+        navigator: {
+            language: fp?.language || 'en-US',
+            platform: fp?.platform || 'Win32',
+            hardwareConcurrency: fp?.hardwareConcurrency || 8,
+            deviceMemory: fp?.deviceMemory || 8,
+        },
+    });
+}
+
+/**
+ * Apply UA, timezone and protection scripts to one page session.
+ * Must run before the page's first document is created.
+ */
+async function applyProfileToPage(
+    client: any,
+    sessionId: string,
+    profile: StoredProfile,
+    realVersion: ChromeVersion,
+): Promise<void> {
+    const platform = profile.fingerprint?.platform || 'Win32';
+    const language = profile.fingerprint?.language || 'en-US';
+    const { userAgent, version } = resolveUserAgent(profile.fingerprint?.userAgent, platform, realVersion);
+
+    await client.send('Network.setUserAgentOverride', {
+        userAgent,
+        platform,
+        acceptLanguage: language,
+        userAgentMetadata: buildUserAgentMetadata(platform, version),
+    }, sessionId);
+
+    await client.send('Page.addScriptToEvaluateOnNewDocument', {
+        source: buildProtectionScript(profile),
+    }, sessionId);
+
+    await client.send('Emulation.setTimezoneOverride', {
+        timezoneId: profile.timezone || 'America/New_York',
+    }, sessionId);
+}
+
+/**
+ * Attach to the browser target and install the profile on every page target,
+ * including pages opened later by Puppeteer/Playwright or by the user.
+ */
+async function installProfileOnBrowser(client: any, profile: StoredProfile): Promise<void> {
+    const realVersion = await getRunningChromeVersion(client);
+    const platform = profile.fingerprint?.platform || 'Win32';
+    const { version, mismatch } = resolveUserAgent(profile.fingerprint?.userAgent, platform, realVersion);
+    if (mismatch) {
+        console.warn(`[browser-profiles] fingerprint.userAgent claims Chrome ${version.major} but the running browser is ${realVersion.major}; detectors compare these`);
+    }
+
+    client.on('Target.attachedToTarget', async (params: any) => {
+        const { sessionId, targetInfo } = params;
+        if (targetInfo?.type === 'page') {
+            try {
+                await applyProfileToPage(client, sessionId, profile, realVersion);
+            } catch (error) {
+                console.error('[browser-profiles] Failed to apply profile to page:', (error as Error).message);
+            }
+        }
+        await client.send('Runtime.runIfWaitingForDebugger', {}, sessionId).catch(() => { });
+    });
+
+    await client.send('Target.setAutoAttach', {
+        autoAttach: true,
+        waitForDebuggerOnStart: true,
+        flatten: true,
+    });
+
+    if (profile.cookies && profile.cookies.length > 0) {
+        await client.send('Storage.setCookies', {
+            cookies: profile.cookies.map((cookie) => ({
+                name: cookie.name,
+                value: cookie.value,
+                domain: cookie.domain,
+                path: cookie.path || '/',
+                httpOnly: cookie.httpOnly || false,
+                secure: cookie.secure || false,
+                sameSite: cookie.sameSite || 'Lax',
+                ...(cookie.expires ? { expires: cookie.expires } : {}),
+            })),
+        }).catch(() => {
+            // Ignore cookie errors
+        });
+    }
+}
+
 /**
  * Options for launchChrome function
  */
@@ -489,92 +583,6 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
 
     console.log(`Chrome launched on port ${chromeProcess.port}, PID: ${chromeProcess.pid}`);
 
-    // Connect via CDP with retry (Chrome needs time to initialize debugging port)
-    let client: any;
-    const cdpMaxRetries = 10;
-    const cdpRetryDelay = 300; // ms
-
-    for (let i = 0; i < cdpMaxRetries; i++) {
-        try {
-            client = await (CDP as any)({ port: chromeProcess.port });
-            break;
-        } catch (cdpError: any) {
-            if (i === cdpMaxRetries - 1) {
-                // Last retry failed, cleanup and throw
-                console.error(`[browser-profiles] Failed to connect CDP after ${cdpMaxRetries} retries`);
-                try {
-                    await chromeProcess.kill();
-                    if (anonymizedProxyUrl) {
-                        await proxyChain.closeAnonymizedProxy(anonymizedProxyUrl, true).catch(() => { });
-                    }
-                } catch { }
-                throw cdpError;
-            }
-            // Wait and retry
-            await new Promise(r => setTimeout(r, cdpRetryDelay));
-        }
-    }
-
-    const { Network, Emulation, Page } = client;
-
-    // Enable network and inject anti-fingerprint scripts
-    await Network.enable();
-
-    const platform = profile.fingerprint?.platform || 'Win32';
-    const language = profile.fingerprint?.language || 'en-US';
-    const realVersion = await getRunningChromeVersion(client);
-    const { userAgent, version, mismatch } = resolveUserAgent(profile.fingerprint?.userAgent, platform, realVersion);
-    if (mismatch) {
-        console.warn(`[browser-profiles] fingerprint.userAgent claims Chrome ${version.major} but the running browser is ${realVersion.major}; detectors compare these`);
-    }
-
-    await Network.setUserAgentOverride({
-        userAgent,
-        platform,
-        acceptLanguage: language,
-        userAgentMetadata: buildUserAgentMetadata(platform, version),
-    });
-
-    // Inject fingerprint protection scripts
-    await Page.addScriptToEvaluateOnNewDocument({
-        source: getAllProtectionScripts({
-            webrtc: true,
-            canvas: true,
-            webgl: true,
-            audio: true,
-            navigator: {
-                language,
-                platform,
-                hardwareConcurrency: profile.fingerprint?.hardwareConcurrency || 8,
-                deviceMemory: profile.fingerprint?.deviceMemory || 8,
-            },
-        }),
-    });
-
-    // Set timezone
-    await Emulation.setTimezoneOverride({
-        timezoneId: profile.timezone || 'America/New_York',
-    });
-
-    // Inject cookies
-    if (profile.cookies && profile.cookies.length > 0) {
-        for (const cookie of profile.cookies) {
-            await Network.setCookie({
-                url: `https://${cookie.domain}`,
-                name: cookie.name,
-                value: cookie.value,
-                domain: cookie.domain,
-                path: cookie.path || '/',
-                httpOnly: cookie.httpOnly || false,
-                secure: cookie.secure || false,
-                sameSite: cookie.sameSite || 'Lax',
-                ...(cookie.expires ? { expires: cookie.expires } : {}),
-            }).catch(() => {
-                // Ignore cookie errors
-            });
-        }
-    }
-
     // Get WebSocket endpoint with retry (browser needs time to fully initialize)
     let versionInfo: { webSocketDebuggerUrl: string } | null = null;
     const maxRetries = 10;
@@ -607,6 +615,26 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
             }
         } catch { }
         throw new Error('Failed to get browser WebSocket endpoint after multiple retries');
+    }
+
+    // Attach to the browser target so every page (current and future, any
+    // context) gets the spoof before its first document runs. Attaching to a
+    // page target picked from /json/list is unreliable: Chrome lists internal
+    // browser_ui targets first.
+    let client: any;
+    try {
+        client = await (CDP as any)({ target: versionInfo.webSocketDebuggerUrl });
+        await installProfileOnBrowser(client, profile);
+    } catch (cdpError) {
+        console.error('[browser-profiles] Failed to attach to browser via CDP');
+        try {
+            await client?.close();
+            await chromeProcess.kill();
+            if (anonymizedProxyUrl) {
+                await proxyChain.closeAnonymizedProxy(anonymizedProxyUrl, true).catch(() => { });
+            }
+        } catch { }
+        throw cdpError;
     }
 
     // Track running browser
