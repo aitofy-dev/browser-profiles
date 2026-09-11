@@ -87,6 +87,16 @@ export type {
     GeneratedFingerprint,
 } from './fingerprint';
 
+// User-Agent helpers (UA always matches the running Chrome's major version)
+export {
+    buildUserAgent,
+    buildBrands,
+    buildUserAgentMetadata,
+    parseChromeVersion,
+    resolveUserAgent,
+} from './user-agent';
+export type { ChromeVersion, ResolvedUserAgent, UserAgentMetadata } from './user-agent';
+
 // Types
 export type {
     // Result type (no try-catch needed!)

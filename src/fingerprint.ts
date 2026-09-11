@@ -5,6 +5,8 @@
 // No extensions needed - lighter and works in headless mode
 // ============================================================================
 
+import { buildBrands, buildUserAgent, FALLBACK_CHROME_MAJOR } from './user-agent';
+
 /**
  * WebRTC leak protection script
  * Prevents real IP from leaking via WebRTC
@@ -691,17 +693,17 @@ export function createClientHintsScript(config: {
   model?: string;
   mobile?: boolean;
   brands?: Array<{ brand: string; version: string }>;
+  fullVersion?: string;
 }): string {
   const platform = config.platform || 'Windows';
   const platformVersion = config.platformVersion || '10.0.0';
   const architecture = config.architecture || 'x86';
   const model = config.model || '';
   const mobile = config.mobile || false;
-  const brands = config.brands || [
-    { brand: 'Chromium', version: '120' },
-    { brand: 'Google Chrome', version: '120' },
-    { brand: 'Not_A Brand', version: '8' }
-  ];
+  const brands = config.brands || buildBrands(FALLBACK_CHROME_MAJOR);
+  const majorVersion = brands.find(b => b.brand === 'Chromium' || b.brand === 'Google Chrome')?.version
+    || String(FALLBACK_CHROME_MAJOR);
+  const uaFullVersion = config.fullVersion || `${majorVersion}.0.0.0`;
 
   const brandsJSON = JSON.stringify(brands);
 
@@ -721,7 +723,7 @@ export function createClientHintsScript(config: {
           platformVersion: '${platformVersion}',
           architecture: '${architecture}',
           model: '${model}',
-          uaFullVersion: '120.0.6099.71',
+          uaFullVersion: '${uaFullVersion}',
           fullVersionList: ${brandsJSON}
         });
       },
@@ -748,26 +750,6 @@ export function createClientHintsScript(config: {
 // ============================================================================
 // Fingerprint Generation
 // ============================================================================
-
-/**
- * User agent data for different platforms
- */
-const USER_AGENTS = {
-  windows: [
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
-  ],
-  macos: [
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 13_6_1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-  ],
-  linux: [
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/119.0.0.0 Safari/537.36',
-  ],
-};
 
 /**
  * Screen resolutions for different platforms
@@ -835,7 +817,7 @@ export interface GenerateFingerprintOptions {
 
   /**
    * Browser version (major)
-   * @default random between 118-122
+   * @default FALLBACK_CHROME_MAJOR (the launcher substitutes the running Chrome's version)
    */
   version?: number;
 
@@ -953,7 +935,6 @@ export interface GeneratedFingerprint {
  */
 export function generateFingerprint(options: GenerateFingerprintOptions = {}): GeneratedFingerprint {
   const randomItem = <T>(arr: readonly T[]): T => arr[Math.floor(Math.random() * arr.length)];
-  const randomInt = (min: number, max: number): number => Math.floor(Math.random() * (max - min + 1)) + min;
 
   // Generate seed for reproducibility
   const seed = `fp-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
@@ -973,8 +954,9 @@ export function generateFingerprint(options: GenerateFingerprintOptions = {}): G
   };
   const platformConfig = platformConfigs[selectedPlatform];
 
-  // Get user agent
-  const userAgent = randomItem(USER_AGENTS[selectedPlatform]);
+  // Browser version: the launcher replaces this with the running Chrome's version
+  const version = options.version || FALLBACK_CHROME_MAJOR;
+  const userAgent = buildUserAgent(platformConfig.platform, version);
 
   // Determine screen resolution
   type ScreenType = 'desktop' | 'laptop' | 'retina';
@@ -1001,9 +983,6 @@ export function generateFingerprint(options: GenerateFingerprintOptions = {}): G
   const memoryOptions = selectedPlatform === 'macos' ? [8, 16, 32, 64] : [4, 8, 16, 32];
   const hardwareConcurrency = randomItem(coreOptions);
   const deviceMemory = randomItem(memoryOptions);
-
-  // Browser version
-  const version = options.version || randomInt(118, 122);
 
   // Client hints
   const clientHintsPlatforms = {
@@ -1048,11 +1027,7 @@ export function generateFingerprint(options: GenerateFingerprintOptions = {}): G
       platformVersion: randomItem(platformVersions[selectedPlatform]),
       architecture: selectedPlatform === 'macos' ? 'arm' : 'x86',
       mobile: false,
-      brands: [
-        { brand: 'Chromium', version: String(version) },
-        { brand: 'Google Chrome', version: String(version) },
-        { brand: 'Not_A Brand', version: '8' },
-      ],
+      brands: buildBrands(version),
     },
 
     meta: {

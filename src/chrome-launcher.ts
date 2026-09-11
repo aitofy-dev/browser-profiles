@@ -7,6 +7,28 @@ import path from 'path';
 import os from 'os';
 import type { StoredProfile, LaunchResult, LaunchOptions, ProxyConfig } from './types';
 import { getAllProtectionScripts } from './fingerprint';
+import {
+    buildUserAgentMetadata,
+    parseChromeVersion,
+    resolveUserAgent,
+    FALLBACK_CHROME_MAJOR,
+    type ChromeVersion,
+} from './user-agent';
+
+/**
+ * Ask the connected browser which Chrome it really is (e.g. "HeadlessChrome/152.0.7977.83").
+ */
+async function getRunningChromeVersion(client: any): Promise<ChromeVersion> {
+    try {
+        const { product } = await client.Browser.getVersion();
+        const parsed = parseChromeVersion(String(product ?? ''));
+        if (parsed) return parsed;
+    } catch {
+        // fall through to fallback
+    }
+    console.warn(`[browser-profiles] Could not read Chrome version, assuming ${FALLBACK_CHROME_MAJOR}`);
+    return { major: FALLBACK_CHROME_MAJOR, full: `${FALLBACK_CHROME_MAJOR}.0.0.0` };
+}
 
 // Dynamic imports to handle ESM/CJS
 let chromeLauncher: typeof import('chrome-launcher');
@@ -498,29 +520,19 @@ export async function launchChrome(options: ChromeLaunchOptions): Promise<Launch
     // Enable network and inject anti-fingerprint scripts
     await Network.enable();
 
-    // Set User-Agent override with platform spoofing (KEY: This is how puppeteer-extra-stealth does it!)
-    const userAgent = profile.fingerprint?.userAgent ||
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     const platform = profile.fingerprint?.platform || 'Win32';
     const language = profile.fingerprint?.language || 'en-US';
+    const realVersion = await getRunningChromeVersion(client);
+    const { userAgent, version, mismatch } = resolveUserAgent(profile.fingerprint?.userAgent, platform, realVersion);
+    if (mismatch) {
+        console.warn(`[browser-profiles] fingerprint.userAgent claims Chrome ${version.major} but the running browser is ${realVersion.major}; detectors compare these`);
+    }
 
     await Network.setUserAgentOverride({
         userAgent,
         platform,
         acceptLanguage: language,
-        userAgentMetadata: {
-            brands: [
-                { brand: 'Not_A Brand', version: '8' },
-                { brand: 'Chromium', version: '120' },
-                { brand: 'Google Chrome', version: '120' },
-            ],
-            fullVersion: '120.0.0.0',
-            platform: platform.includes('Win') ? 'Windows' : (platform.includes('Mac') ? 'macOS' : 'Linux'),
-            platformVersion: platform.includes('Win') ? '10.0.0' : '14.0.0',
-            architecture: 'x86',
-            model: '',
-            mobile: false,
-        },
+        userAgentMetadata: buildUserAgentMetadata(platform, version),
     });
 
     // Inject fingerprint protection scripts
