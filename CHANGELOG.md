@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-12
+
+### Fixed
+
+- **User-Agent now matches the running Chrome.** The UA and Client Hints (`Sec-CH-UA`, `navigator.userAgentData`) were pinned to Chrome 119-121; current Chrome is 152, and detectors compare the two. The launcher now reads the real version via CDP and builds the UA from it. An explicit `fingerprint.userAgent` still wins and logs a warning when its major version differs.
+- **WebGL vendor/renderer no longer leaks the real GPU** on the Puppeteer and Playwright paths. Protection scripts are injected through the automation library's own API, and the launcher attaches at the browser target so pages opened later are covered too.
+- **Web workers now see the spoofed navigator and WebGL** (#1). `Worker` and `SharedWorker` are wrapped so the spoof runs before the worker script. Module workers and service workers are passed through untouched.
+
+### Changed
+
+- WebGL vendor/renderer is chosen once per profile, consistent with its platform, and persisted in `fingerprint.webgl` instead of being random per page load.
+- Removed the hardcoded `USER_AGENTS` list. New pure helpers exported: `buildUserAgent`, `buildBrands`, `buildUserAgentMetadata`, `parseChromeVersion`, `resolveUserAgent`.
+
+### Added
+
+- Unit tests (vitest) for UA/fingerprint consistency and WebGL/worker scripts, plus a headless integration test that is skipped when no Chrome is installed.
+- GitHub Actions CI on Ubuntu and macOS.
+
 ## [0.2.12] - 2026-01-14
 
 ### Added

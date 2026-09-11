@@ -179,4 +179,4 @@ export type {
 } from './integrations/playwright';
 
 // Version
-export const VERSION = '0.2.12';
+export const VERSION = '0.3.0';
