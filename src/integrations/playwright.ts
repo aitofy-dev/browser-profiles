@@ -4,6 +4,15 @@
 
 import type { StoredProfile, LaunchOptions, LaunchResult, ProxyConfig, ProfileConfig } from '../types';
 import { BrowserProfiles } from '../profile-manager';
+import { getProfileProtectionScripts } from '../fingerprint';
+
+/**
+ * CDP overrides set by the launcher are per-session and do not reach a context
+ * created over connectOverCDP, so the same bundle is re-injected here.
+ */
+async function applyProtection(context: PlaywrightContextType, fingerprint?: StoredProfile['fingerprint']): Promise<void> {
+    await context.addInitScript(getProfileProtectionScripts(fingerprint));
+}
 
 // ============================================================================
 // NATIVE TYPE RE-EXPORTS
@@ -179,10 +188,12 @@ export async function withPlaywright(options: WithPlaywrightOptions): Promise<Wi
             timezoneId: profile.timezone || 'America/New_York',
             viewport: options.defaultViewport || null,
         });
+        await applyProtection(context, profile.fingerprint);
         page = await context.newPage();
     } else {
         const contexts = browser.contexts();
         context = contexts.length > 0 ? contexts[0] : await browser.newContext();
+        await applyProtection(context, profile.fingerprint);
         const pages = context.pages();
         page = pages.length > 0 ? pages[0] : await context.newPage();
     }
@@ -246,10 +257,12 @@ export async function quickLaunchPlaywright(options: QuickLaunchPlaywrightOption
             timezoneId: options.timezone || 'America/New_York',
             viewport: options.defaultViewport || null,
         });
+        await applyProtection(context, profile.fingerprint);
         page = await context.newPage();
     } else {
         const contexts = browser.contexts();
         context = contexts.length > 0 ? contexts[0] : await browser.newContext();
+        await applyProtection(context, profile.fingerprint);
         const pages = context.pages();
         page = pages.length > 0 ? pages[0] : await context.newPage();
     }

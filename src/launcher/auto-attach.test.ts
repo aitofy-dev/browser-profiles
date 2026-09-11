@@ -15,6 +15,8 @@ const profile: StoredProfile = {
     updatedAt: 0,
     timezone: 'Europe/Paris',
     fingerprint: { userAgent: 'UA/1.0', platform: 'MacIntel', language: 'fr-FR' },
+    // Cookies are installed once at the browser level, so no tab session may carry them.
+    cookies: [{ name: 'sid', value: 'abc', domain: 'example.com' }],
 };
 
 interface SentCommand {

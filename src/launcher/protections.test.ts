@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { StoredProfile } from '../types';
-import { applyProtections, buildProtectionPlan, sessionOf } from './protections';
+import { applyCookies, applyProtections, buildProtectionPlan, sessionOf } from './protections';
 import type { CdpParams, CdpResult } from './deps';
 
 interface RecordedCall {
@@ -38,6 +38,31 @@ const profile: StoredProfile = {
 };
 
 describe('buildProtectionPlan', () => {
+    it('builds the user agent from the running Chrome when the profile pins none', () => {
+        const plan = buildProtectionPlan(
+            { id: 'p3', name: 'Bare', createdAt: 0, updatedAt: 0, fingerprint: { platform: 'Win32' } },
+            'Europe/Paris',
+            { major: 152, full: '152.0.7977.83' }
+        );
+        expect(plan.userAgentOverride.userAgent).toContain('Chrome/152.0.0.0');
+        const metadata = plan.userAgentOverride.userAgentMetadata as { fullVersion: string };
+        expect(metadata.fullVersion).toBe('152.0.7977.83');
+        expect(plan.userAgentMismatch).toBeNull();
+    });
+
+    it('reports a pinned user agent that claims another Chrome major', () => {
+        const pinned: StoredProfile = {
+            id: 'p4',
+            name: 'Pinned',
+            createdAt: 0,
+            updatedAt: 0,
+            fingerprint: { userAgent: 'Mozilla/5.0 Chrome/120.0.0.0 Safari/537.36', platform: 'Win32' },
+        };
+        const plan = buildProtectionPlan(pinned, 'Europe/Paris', { major: 152, full: '152.0.7977.83' });
+        expect(plan.userAgentOverride.userAgent).toContain('Chrome/120.0.0.0');
+        expect(plan.userAgentMismatch).toEqual({ claimed: 120, running: 152 });
+    });
+
     it('maps the profile fingerprint into the user agent override', () => {
         const plan = buildProtectionPlan(profile);
         expect(plan.userAgentOverride).toMatchObject({
@@ -64,6 +89,12 @@ describe('buildProtectionPlan', () => {
         expect(plan.initScript).toContain('webdriver');
     });
 
+    it('carries the WebGL and worker spoof', () => {
+        const plan = buildProtectionPlan(profile);
+        expect(plan.initScript).toContain('UNMASKED_RENDERER_WEBGL');
+        expect(plan.initScript).toContain('wrapWorker');
+    });
+
     it('builds one cookie payload per profile cookie', () => {
         const plan = buildProtectionPlan(profile);
         expect(plan.cookies).toEqual([
@@ -82,7 +113,7 @@ describe('buildProtectionPlan', () => {
 });
 
 describe('applyProtections', () => {
-    it('sends user agent, script, timezone and cookies in order', async () => {
+    it('sends user agent, script and timezone in order', async () => {
         const session = fakeSession();
         const plan = buildProtectionPlan(profile);
 
@@ -94,17 +125,10 @@ describe('applyProtections', () => {
             'Page.enable',
             'Page.addScriptToEvaluateOnNewDocument',
             'Emulation.setTimezoneOverride',
-            'Network.setCookie',
         ]);
         expect(session.calls[1].params).toEqual(plan.userAgentOverride);
         expect(session.calls[3].params).toEqual({ source: plan.initScript });
         expect(session.calls[4].params).toEqual({ timezoneId: 'Europe/Paris' });
-        expect(session.calls[5].params).toEqual(plan.cookies[0]);
-    });
-
-    it('ignores a rejected cookie', async () => {
-        const session = fakeSession('Network.setCookie');
-        await expect(applyProtections(session, buildProtectionPlan(profile))).resolves.toBeUndefined();
     });
 
     it('propagates a failure of a protection that matters', async () => {
@@ -112,6 +136,30 @@ describe('applyProtections', () => {
         await expect(applyProtections(session, buildProtectionPlan(profile))).rejects.toThrow(
             'Network.setUserAgentOverride rejected'
         );
+    });
+});
+
+describe('applyCookies', () => {
+    it('installs every cookie once, at the browser level', async () => {
+        const session = fakeSession();
+        const plan = buildProtectionPlan(profile);
+
+        await applyCookies(session, plan);
+
+        expect(session.calls).toEqual([
+            { method: 'Storage.setCookies', params: { cookies: plan.cookies } },
+        ]);
+    });
+
+    it('sends nothing when the profile has no cookies', async () => {
+        const session = fakeSession();
+        await applyCookies(session, buildProtectionPlan({ id: 'p2', name: 'Bare', createdAt: 0, updatedAt: 0 }));
+        expect(session.calls).toEqual([]);
+    });
+
+    it('ignores a rejected cookie store', async () => {
+        const session = fakeSession('Storage.setCookies');
+        await expect(applyCookies(session, buildProtectionPlan(profile))).resolves.toBeUndefined();
     });
 });
 

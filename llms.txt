@@ -24,8 +24,12 @@ This file is the whole story in one page. The same material, split up, lives nex
 
 Stores browser profiles locally (proxy, timezone, fingerprint, cookies, Chrome user data) and
 launches real Chrome with anti-detect injections applied over CDP: WebRTC, Canvas, WebGL, Audio,
-navigator, timezone. Authenticated proxies are handled by a local relay. Profiles persist between
-runs, so logins survive.
+navigator, workers, timezone. The user agent and Client Hints are built from the major version of
+the Chrome that is actually running, read with Browser.getVersion at launch; a pinned
+fingerprint.userAgent wins and logs a warning when its major differs. The WebGL vendor/renderer is
+picked once per profile, consistent with its platform, and stored in fingerprint.webgl. Worker and
+SharedWorker run the same spoof as the main thread. Authenticated proxies are handled by a local
+relay. Profiles persist between runs, so logins survive.
 
 Anti-detect scores: browserleaks.com 100%, pixelscan.net 100%, browserscan.net 95%, creepjs 85%.
 95% is the ceiling for Puppeteer/Playwright; 100% needs a modified Chromium.
@@ -194,6 +198,17 @@ createSession({temporary, randomFingerprint}) Throwaway session with a random fi
 patchPage(page, options)                      Apply anti-detect patches to a page you already have.
 generateFingerprint(options)                  Build a consistent random fingerprint.
 getFingerprintScripts(fingerprint)            Injection scripts for that fingerprint.
+getAllProtectionScripts(options)              The full bundle: webrtc, canvas, webgl, audio,
+                                              navigator, workers.
+getProfileProtectionScripts(fingerprint)      That bundle for a profile fingerprint. The launcher
+                                              and both integrations inject exactly this.
+createWebGLScript({vendor, renderer})         WebGL spoof for one GPU, stable across page loads.
+createWorkerSpoofScript(prelude)              Wrap Worker/SharedWorker to run the prelude first.
+pickWebGLForPlatform(platform)                A GPU consistent with that navigator.platform.
+buildUserAgent(platform, major)               Reduced Chrome UA. buildBrands(major) for Sec-CH-UA.
+buildUserAgentMetadata(platform, version)     Payload for Network.setUserAgentOverride.
+parseChromeVersion(text)                      Version out of a UA or a Browser.getVersion product.
+resolveUserAgent(pinned, platform, running)   {userAgent, version, mismatch}.
 launchChromeStandalone(options)               Launch Chrome with no profile management.
 parseProxyUrl(url) / formatProxyUrl(config)   Proxy URL <-> ProxyConfig.
 createLogger(namespace)                       stderr logger used by the package.

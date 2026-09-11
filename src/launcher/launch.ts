@@ -11,7 +11,8 @@ import { getChromePath } from './chrome-path';
 import { claimProfile } from './claim';
 import { loadCdp, loadChromeLauncher } from './deps';
 import type { CdpClient, CdpConnectOptions, LaunchedChrome } from './deps';
-import { applyProtections, buildProtectionPlan, sessionOf } from './protections';
+import { applyCookies, applyProtections, buildProtectionPlan, sessionOf } from './protections';
+import type { ProtectionPlan } from './protections';
 import {
     assertDetachedLaunchAllowed,
     closeProxyRelay,
@@ -20,6 +21,8 @@ import {
 } from './proxy';
 import { reuseExisting } from './reuse';
 import { trackBrowser, untrackBrowser } from './running';
+import { parseChromeVersion, FALLBACK_CHROME_MAJOR, FALLBACK_CHROME_VERSION } from '../user-agent';
+import type { ChromeVersion } from '../user-agent';
 
 const log = createLogger('chrome-launcher');
 
@@ -204,13 +207,12 @@ async function launchClaimed(options: ChromeLaunchOptions, userDataDir: string):
         throw new Error('Failed to get browser WebSocket endpoint after multiple retries');
     }
 
-    const plan = buildProtectionPlan(profile, timezone);
     let releaseSession: (() => Promise<void>) | undefined;
 
     try {
         releaseSession = detached
-            ? await protectFirstTabOnly(chrome.port, plan)
-            : await protectEveryTab(wsEndpoint, plan, profile.id, userDataDir, relayUrl);
+            ? await protectFirstTabOnly(chrome.port, profile, timezone)
+            : await protectEveryTab(wsEndpoint, profile, timezone, userDataDir, relayUrl);
     } catch (error) {
         await abortLaunch(chrome, relayUrl);
         throw error;
@@ -241,14 +243,43 @@ async function launchClaimed(options: ChromeLaunchOptions, userDataDir: string):
     return { wsEndpoint, pid: chrome.pid, port: chrome.port, profileId: profile.id, close, detached };
 }
 
+/** Ask the browser which Chrome it really is, so the UA cannot claim another version. */
+async function readChromeVersion(client: CdpClient): Promise<ChromeVersion> {
+    try {
+        const { product } = await client.send('Browser.getVersion');
+        const parsed = parseChromeVersion(String(product ?? ''));
+        if (parsed) return parsed;
+    } catch {
+        // A UA one major off still beats refusing to launch.
+    }
+    log.warn(`Could not read the Chrome version, assuming ${FALLBACK_CHROME_MAJOR}`);
+    return FALLBACK_CHROME_VERSION;
+}
+
+/** The plan needs the running Chrome's version, so it is built once the client is connected. */
+async function planFor(client: CdpClient, profile: StoredProfile, timezone: string): Promise<ProtectionPlan> {
+    const plan = buildProtectionPlan(profile, timezone, await readChromeVersion(client));
+    const mismatch = plan.userAgentMismatch;
+    if (mismatch) {
+        log.warn(
+            `fingerprint.userAgent claims Chrome ${mismatch.claimed} but the running browser is ` +
+            `${mismatch.running}; detectors compare these. Drop fingerprint.userAgent to follow the browser.`
+        );
+    }
+    return plan;
+}
+
 /**
  * Detached: the CDP socket would pin our event loop, so it is closed again.
  * Cost: only the tab open right now carries the per-session overrides.
  */
-async function protectFirstTabOnly(port: number, plan: ReturnType<typeof buildProtectionPlan>): Promise<undefined> {
+async function protectFirstTabOnly(port: number, profile: StoredProfile, timezone: string): Promise<undefined> {
     const client = await connectCdp({ port });
     try {
-        await applyProtections(sessionOf(client), plan);
+        const plan = await planFor(client, profile, timezone);
+        const session = sessionOf(client);
+        await applyProtections(session, plan);
+        await applyCookies(session, plan);
     } finally {
         await client.close().catch(() => undefined);
     }
@@ -258,12 +289,14 @@ async function protectFirstTabOnly(port: number, plan: ReturnType<typeof buildPr
 /** Attached: one browser-level connection protects the first tab and every later one. */
 async function protectEveryTab(
     wsEndpoint: string,
-    plan: ReturnType<typeof buildProtectionPlan>,
-    profileId: string,
+    profile: StoredProfile,
+    timezone: string,
     userDataDir: string,
     relayUrl: string | undefined
 ): Promise<() => Promise<void>> {
     const client = await connectCdp({ target: wsEndpoint });
+    const plan = await planFor(client, profile, timezone);
+    await applyCookies(sessionOf(client), plan);
 
     const handle = await startAutoAttach({
         client,
@@ -271,7 +304,7 @@ async function protectEveryTab(
         log,
         onDisconnect: () => {
             // The browser died on its own: drop the state that claims it is alive.
-            untrackBrowser(profileId);
+            untrackBrowser(profile.id);
             deleteLockFile(userDataDir);
             void closeProxyRelay(relayUrl);
         },

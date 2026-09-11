@@ -75,7 +75,11 @@ export {
     WEBGL_PROTECTION_SCRIPT,
     AUDIO_PROTECTION_SCRIPT,
     getAllProtectionScripts,
+    getProfileProtectionScripts,
     createNavigatorScript,
+    createWebGLScript,
+    createWorkerSpoofScript,
+    pickWebGLForPlatform,
     // v0.2.0: Fingerprint generation
     generateFingerprint,
     getFingerprintScripts,
@@ -85,7 +89,18 @@ export {
 export type {
     GenerateFingerprintOptions,
     GeneratedFingerprint,
+    WebGLSpoofConfig,
 } from './fingerprint';
+
+// User-Agent helpers (UA always matches the running Chrome's major version)
+export {
+    buildUserAgent,
+    buildBrands,
+    buildUserAgentMetadata,
+    parseChromeVersion,
+    resolveUserAgent,
+} from './user-agent';
+export type { ChromeVersion, ResolvedUserAgent, UserAgentMetadata } from './user-agent';
 
 // Types
 export type {
@@ -188,4 +203,4 @@ export type {
 } from './integrations/playwright';
 
 // Version
-export const VERSION = '0.2.12';
+export const VERSION = '0.3.0';

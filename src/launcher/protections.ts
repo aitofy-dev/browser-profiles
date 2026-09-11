@@ -3,16 +3,11 @@
 // ============================================================================
 
 import type { ProfileCookie, StoredProfile } from '../types';
-import { getAllProtectionScripts } from '../fingerprint';
+import { FINGERPRINT_DEFAULTS, getProfileProtectionScripts } from '../fingerprint';
+import { buildUserAgentMetadata, resolveUserAgent, FALLBACK_CHROME_VERSION } from '../user-agent';
+import type { ChromeVersion } from '../user-agent';
 import type { CdpClient, CdpParams, CdpResult } from './deps';
 import { FALLBACK_TIMEZONE } from './proxy';
-
-const DEFAULT_USER_AGENT =
-    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const DEFAULT_PLATFORM = 'Win32';
-const DEFAULT_LANGUAGE = 'en-US';
-const DEFAULT_CORES = 8;
-const DEFAULT_MEMORY_GB = 8;
 
 /** One CDP target, addressed directly or through a flat session id. */
 export interface CdpSession {
@@ -33,12 +28,8 @@ export interface ProtectionPlan {
     initScript: string;
     timezoneId: string;
     cookies: CdpParams[];
-}
-
-function metadataPlatform(platform: string): string {
-    if (platform.includes('Win')) return 'Windows';
-    if (platform.includes('Mac')) return 'macOS';
-    return 'Linux';
+    /** Set when the profile pins a UA claiming another Chrome major than the browser running it. */
+    userAgentMismatch: { claimed: number; running: number } | null;
 }
 
 function cookieParams(cookie: ProfileCookie): CdpParams {
@@ -57,44 +48,31 @@ function cookieParams(cookie: ProfileCookie): CdpParams {
 
 /** Pure: turn a profile into the exact CDP payloads its tabs need. */
 /** `timezoneId` is the timezone Chrome was started with (TZ env), so Intl and the clock agree. */
-export function buildProtectionPlan(profile: StoredProfile, timezoneId: string = profile.timezone || FALLBACK_TIMEZONE): ProtectionPlan {
-    const userAgent = profile.fingerprint?.userAgent || DEFAULT_USER_AGENT;
-    const platform = profile.fingerprint?.platform || DEFAULT_PLATFORM;
-    const language = profile.fingerprint?.language || DEFAULT_LANGUAGE;
+/** `chromeVersion` is the version the browser really reports, so the UA cannot claim another one. */
+export function buildProtectionPlan(
+    profile: StoredProfile,
+    timezoneId: string = profile.timezone || FALLBACK_TIMEZONE,
+    chromeVersion: ChromeVersion = FALLBACK_CHROME_VERSION
+): ProtectionPlan {
+    const platform = profile.fingerprint?.platform || FINGERPRINT_DEFAULTS.platform;
+    const language = profile.fingerprint?.language || FINGERPRINT_DEFAULTS.language;
+    const { userAgent, version, mismatch } = resolveUserAgent(
+        profile.fingerprint?.userAgent,
+        platform,
+        chromeVersion
+    );
 
     return {
         userAgentOverride: {
             userAgent,
             platform,
             acceptLanguage: language,
-            userAgentMetadata: {
-                brands: [
-                    { brand: 'Not_A Brand', version: '8' },
-                    { brand: 'Chromium', version: '120' },
-                    { brand: 'Google Chrome', version: '120' },
-                ],
-                fullVersion: '120.0.0.0',
-                platform: metadataPlatform(platform),
-                platformVersion: platform.includes('Win') ? '10.0.0' : '14.0.0',
-                architecture: 'x86',
-                model: '',
-                mobile: false,
-            },
+            userAgentMetadata: buildUserAgentMetadata(platform, version),
         },
-        initScript: getAllProtectionScripts({
-            webrtc: true,
-            canvas: true,
-            webgl: true,
-            audio: true,
-            navigator: {
-                language,
-                platform,
-                hardwareConcurrency: profile.fingerprint?.hardwareConcurrency || DEFAULT_CORES,
-                deviceMemory: profile.fingerprint?.deviceMemory || DEFAULT_MEMORY_GB,
-            },
-        }),
+        initScript: getProfileProtectionScripts(profile.fingerprint),
         timezoneId,
         cookies: (profile.cookies ?? []).map(cookieParams),
+        userAgentMismatch: mismatch ? { claimed: version.major, running: chromeVersion.major } : null,
     };
 }
 
@@ -109,9 +87,14 @@ export async function applyProtections(session: CdpSession, plan: ProtectionPlan
     await session.send('Page.enable');
     await session.send('Page.addScriptToEvaluateOnNewDocument', { source: plan.initScript });
     await session.send('Emulation.setTimezoneOverride', { timezoneId: plan.timezoneId });
+}
 
-    for (const cookie of plan.cookies) {
-        // A cookie the target rejects must not cost the rest of the protections.
-        await session.send('Network.setCookie', cookie).catch(() => undefined);
-    }
+/**
+ * Cookies belong to the browser's cookie store, not to one tab, so they are
+ * installed once per launch and every later tab inherits them.
+ */
+export async function applyCookies(session: CdpSession, plan: ProtectionPlan): Promise<void> {
+    if (plan.cookies.length === 0) return;
+    // A cookie the browser rejects must not cost the rest of the launch.
+    await session.send('Storage.setCookies', { cookies: plan.cookies }).catch(() => undefined);
 }

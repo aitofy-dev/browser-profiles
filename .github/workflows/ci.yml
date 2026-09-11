@@ -7,11 +7,12 @@ on:
 
 jobs:
   build:
-    name: Node ${{ matrix.node }}
-    runs-on: ubuntu-latest
+    name: Node ${{ matrix.node }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-latest, macos-latest]
         node: ['20', '22']
 
     steps:

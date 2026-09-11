@@ -5,6 +5,7 @@
 import type { StoredProfile, LaunchOptions, LaunchResult, ProxyConfig, ProfileConfig } from '../types';
 import { BrowserProfiles } from '../profile-manager';
 import { createLogger } from '../log';
+import { createWebGLScript, createWorkerSpoofScript, createNavigatorScript, getProfileProtectionScripts, pickWebGLForPlatform } from '../fingerprint';
 
 const log = createLogger('puppeteer');
 
@@ -280,159 +281,14 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         slowMo: options.slowMo,
     });
 
-    // Helper to inject fingerprint protection scripts into a page
-    // IMPORTANT: Must use Puppeteer's native evaluateOnNewDocument, NOT CDP session!
-    // CDP session created via page.createCDPSession() does NOT work for script injection.
+    // Inject the full anti-detect bundle via Puppeteer's native API.
+    // CDP script injection is per-session, so scripts installed by the launcher
+    // on its own CDP client do NOT reach pages driven by this Puppeteer
+    // connection. Re-injecting here is what actually protects the page.
+    const bundle = getProfileProtectionScripts(profile.fingerprint);
     const injectProtectionScripts = async (page: PuppeteerPage) => {
-        // Get fingerprint config from profile
-        const fpConfig = {
-            language: profile.fingerprint?.language || 'en-US',
-            platform: profile.fingerprint?.platform || 'Win32',
-            hardwareConcurrency: profile.fingerprint?.hardwareConcurrency || 8,
-            deviceMemory: profile.fingerprint?.deviceMemory || 8,
-        };
-
-        // Inject navigator overrides using string template (avoids TypeScript browser context issues)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (page as any).evaluateOnNewDocument(`
-            (function() {
-                var config = ${JSON.stringify(fpConfig)};
-                var nav = Object.getPrototypeOf(window.navigator);
-                Object.defineProperty(nav, 'hardwareConcurrency', {
-                    get: function() { return config.hardwareConcurrency; },
-                    configurable: true
-                });
-                Object.defineProperty(nav, 'deviceMemory', {
-                    get: function() { return config.deviceMemory; },
-                    configurable: true
-                });
-                Object.defineProperty(nav, 'platform', {
-                    get: function() { return config.platform; },
-                    configurable: true
-                });
-                Object.defineProperty(nav, 'language', {
-                    get: function() { return config.language; },
-                    configurable: true
-                });
-                Object.defineProperty(nav, 'languages', {
-                    get: function() { return [config.language, config.language.split('-')[0]]; },
-                    configurable: true
-                });
-            })();
-        `);
-
-        // WebRTC protection
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (page as any).evaluateOnNewDocument(`
-            (function() {
-                const origRTC = window.RTCPeerConnection;
-                if (origRTC) {
-                    window.RTCPeerConnection = function(conf, constraints) {
-                        if (conf && conf.iceServers) conf.iceCandidatePoolSize = 0;
-                        const pc = new origRTC(conf, constraints);
-                        const origAddListener = pc.addEventListener.bind(pc);
-                        pc.addEventListener = function(type, listener, options) {
-                            if (type === 'icecandidate') {
-                                return origAddListener(type, function(e) {
-                                    if (e.candidate && e.candidate.candidate &&
-                                        (e.candidate.candidate.includes('typ host') ||
-                                         e.candidate.candidate.includes('typ srflx'))) return;
-                                    listener.call(this, e);
-                                }, options);
-                            }
-                            return origAddListener(type, listener, options);
-                        };
-                        return pc;
-                    };
-                }
-            })();
-        `);
-
-        // Automation detection bypass (webdriver, chrome object, plugins, etc.)
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (page as any).evaluateOnNewDocument(`
-            (function() {
-                // Remove webdriver flag
-                Object.defineProperty(navigator, 'webdriver', {
-                    get: function() { return undefined; },
-                    configurable: true
-                });
-                delete Object.getPrototypeOf(navigator).webdriver;
-                
-                // Fix chrome object for headless detection
-                if (!window.chrome) window.chrome = {};
-                if (!window.chrome.runtime) window.chrome.runtime = {};
-                
-                // Fix chrome.csi
-                if (!window.chrome.csi) {
-                    window.chrome.csi = function() {
-                        return { startE: Date.now(), onloadT: Date.now() + 100, pageT: Date.now() + 150, tran: 15 };
-                    };
-                }
-                
-                // Fix chrome.loadTimes
-                if (!window.chrome.loadTimes) {
-                    window.chrome.loadTimes = function() {
-                        return {
-                            commitLoadTime: Date.now() / 1000,
-                            connectionInfo: "http/1.1",
-                            finishDocumentLoadTime: Date.now() / 1000 + 0.1,
-                            finishLoadTime: Date.now() / 1000 + 0.2,
-                            firstPaintTime: Date.now() / 1000 + 0.05,
-                            navigationType: "Other",
-                            requestTime: Date.now() / 1000 - 0.5,
-                            startLoadTime: Date.now() / 1000 - 0.3
-                        };
-                    };
-                }
-                
-                // Mock permissions API
-                if (navigator.permissions && navigator.permissions.query) {
-                    var origQuery = navigator.permissions.query.bind(navigator.permissions);
-                    navigator.permissions.query = function(params) {
-                        if (params.name === 'notifications') {
-                            return Promise.resolve({ state: Notification.permission });
-                        }
-                        return origQuery(params);
-                    };
-                }
-                
-                // Fix plugins for non-headless
-                if (navigator.plugins.length === 0) {
-                    Object.defineProperty(navigator, 'plugins', {
-                        get: function() {
-                            var plugins = [
-                                { name: 'Chrome PDF Plugin', filename: 'internal-pdf-viewer', description: 'PDF' },
-                                { name: 'Chrome PDF Viewer', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', description: '' },
-                                { name: 'Native Client', filename: 'internal-nacl-plugin', description: '' }
-                            ];
-                            plugins.item = function(i) { return plugins[i]; };
-                            plugins.namedItem = function(n) { return plugins.find(function(p) { return p.name === n; }); };
-                            plugins.refresh = function() {};
-                            return plugins;
-                        },
-                        configurable: true
-                    });
-                }
-                
-                // Fix connection API
-                if (!navigator.connection) {
-                    Object.defineProperty(navigator, 'connection', {
-                        get: function() {
-                            return { effectiveType: '4g', rtt: 50, downlink: 10, saveData: false, type: 'wifi' };
-                        },
-                        configurable: true
-                    });
-                }
-                
-                // Add battery API
-                if (!navigator.getBattery) {
-                    navigator.getBattery = function() {
-                        return Promise.resolve({ charging: true, chargingTime: 0, dischargingTime: Infinity, level: 1 });
-                    };
-                }
-            })();
-        `);
+        await (page as any).evaluateOnNewDocument(bundle);
     };
 
     // Listen for new pages and inject scripts (like puppeteer-extra-stealth's onPageCreated)
@@ -546,77 +402,10 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
     const pages = await browser.pages();
     const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
-    // Inject fingerprint protection scripts
-    const fpConfig = {
-        language: profile.fingerprint?.language || 'en-US',
-        platform: profile.fingerprint?.platform || 'Win32',
-        hardwareConcurrency: profile.fingerprint?.hardwareConcurrency || 8,
-        deviceMemory: profile.fingerprint?.deviceMemory || 8,
-    };
-
+    // Inject the full anti-detect bundle (navigator, WebGL, workers, WebRTC,
+    // automation bypass) via Puppeteer's native API.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (page as any).evaluateOnNewDocument(`
-        (function() {
-            var config = ${JSON.stringify(fpConfig)};
-            var nav = Object.getPrototypeOf(window.navigator);
-            Object.defineProperty(nav, 'hardwareConcurrency', {
-                get: function() { return config.hardwareConcurrency; },
-                configurable: true
-            });
-            Object.defineProperty(nav, 'deviceMemory', {
-                get: function() { return config.deviceMemory; },
-                configurable: true
-            });
-            Object.defineProperty(nav, 'platform', {
-                get: function() { return config.platform; },
-                configurable: true
-            });
-            Object.defineProperty(nav, 'language', {
-                get: function() { return config.language; },
-                configurable: true
-            });
-            Object.defineProperty(nav, 'languages', {
-                get: function() { return [config.language, config.language.split('-')[0]]; },
-                configurable: true
-            });
-        })();
-    `);
-
-    // Automation detection bypass
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (page as any).evaluateOnNewDocument(`
-        (function() {
-            Object.defineProperty(navigator, 'webdriver', { get: function() { return undefined; }, configurable: true });
-            delete Object.getPrototypeOf(navigator).webdriver;
-            if (!window.chrome) window.chrome = {};
-            if (!window.chrome.runtime) window.chrome.runtime = {};
-            if (!window.chrome.csi) window.chrome.csi = function() { return { startE: Date.now(), onloadT: Date.now() + 100 }; };
-            if (!window.chrome.loadTimes) window.chrome.loadTimes = function() { return { commitLoadTime: Date.now() / 1000 }; };
-            if (navigator.plugins.length === 0) {
-                Object.defineProperty(navigator, 'plugins', {
-                    get: function() {
-                        var p = [{ name: 'Chrome PDF Plugin' }, { name: 'Chrome PDF Viewer' }, { name: 'Native Client' }];
-                        p.item = function(i) { return p[i]; };
-                        p.namedItem = function(n) { return p.find(function(x) { return x.name === n; }); };
-                        p.refresh = function() {};
-                        return p;
-                    }, configurable: true
-                });
-            }
-            if (!navigator.connection) {
-                Object.defineProperty(navigator, 'connection', {
-                    get: function() { return { effectiveType: '4g', rtt: 50, downlink: 10 }; },
-                    configurable: true
-                });
-            }
-            if (!navigator.getBattery) {
-                navigator.getBattery = function() {
-                    return Promise.resolve({ charging: true, level: 1 });
-                };
-            }
-        })();
-    `);
-    // Note: evaluateOnNewDocument scripts will run on first user navigation
+    await (page as any).evaluateOnNewDocument(getProfileProtectionScripts(profile.fingerprint));
 
     // Close function - by default only closes this session's page
     const close = async (closeOptions?: CloseOptions) => {
@@ -923,6 +712,22 @@ export async function patchPage(page: PuppeteerPage, options: PatchPageOptions =
                 }
             })();
         `);
+    }
+
+    // WebGL renderer spoof + worker re-injection
+    if (options.webgl !== false) {
+        const webgl = pickWebGLForPlatform(fpConfig.platform);
+        const webglScript = createWebGLScript(webgl);
+        const navScript = createNavigatorScript({
+            language: fpConfig.language,
+            platform: fpConfig.platform,
+            hardwareConcurrency: fpConfig.hardwareConcurrency,
+            deviceMemory: fpConfig.deviceMemory,
+        });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (page as any).evaluateOnNewDocument(webglScript);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (page as any).evaluateOnNewDocument(createWorkerSpoofScript(navScript + '\n\n' + webglScript));
     }
 
     log.debug('Page patched with anti-detect protections');

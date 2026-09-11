@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.3.0] - Unreleased
+## [0.3.0] - 2026-09-12
 
 ### Added
 
@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Per-tab protection.** New page targets opened over `wsEndpoint` by an external client
   (Playwright MCP, Puppeteer `connect`) get the same injections before the page runs, not only the
   first tab.
+- **Pure User-Agent helpers** exported: `buildUserAgent`, `buildBrands`, `buildUserAgentMetadata`,
+  `parseChromeVersion`, `resolveUserAgent`. WebGL and worker helpers: `createWebGLScript`,
+  `createWorkerSpoofScript`, `pickWebGLForPlatform`.
+- Unit tests (vitest) for UA/fingerprint consistency and WebGL/worker scripts, plus a headless
+  integration test opted into with `BROWSER_PROFILES_E2E=1`.
+- GitHub Actions CI on Ubuntu and macOS, Node 20 and 22.
 
 ### Changed
 
@@ -42,9 +48,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All diagnostics moved to stderr and are silent unless `DEBUG=browser-profiles*` or `--verbose`.
   stdout now belongs to `--json` and to the MCP protocol.
 - `browser-profiles path` reports the configured storage path instead of the hardcoded default.
+- WebGL vendor/renderer is chosen once per profile, consistent with its platform, and persisted in
+  `fingerprint.webgl` instead of being random per page load.
+- Removed the hardcoded `USER_AGENTS` list; the User-Agent is built from the running Chrome.
 
 ### Fixed
 
+- **User-Agent now matches the running Chrome.** The UA and Client Hints (`Sec-CH-UA`,
+  `navigator.userAgentData`) were pinned to Chrome 119-121; current Chrome is 152, and detectors
+  compare the two. The launcher reads the real version via `Browser.getVersion` and builds the UA
+  from it. An explicit `fingerprint.userAgent` still wins and logs a warning when its major
+  version differs.
+- **WebGL vendor/renderer no longer leaks the real GPU** on the Puppeteer and Playwright paths.
+  Protection scripts are injected through the automation library's own API, and the launcher
+  attaches at the browser target so pages opened later are covered too.
+- **Web workers now see the spoofed navigator and WebGL** (#1). `Worker` and `SharedWorker` are
+  wrapped so the spoof runs before the worker script. Module workers and service workers are
+  passed through untouched.
 - Fingerprint injection never ran: `Page.addScriptToEvaluateOnNewDocument` was sent before
   `Page.enable`, so navigator overrides (platform, cores, memory) were silently ignored.
 - Every tab is now protected, not only the first. New tabs opened by Playwright MCP, Puppeteer or
@@ -56,6 +76,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Proxy URL parsing: an explicit default port (`http://host:80`) is no longer dropped, a missing
   port is rejected with an actionable message, `socks` and `socks5h` normalise to `socks5`, and
   percent-encoded credentials (`p%40ss`) are decoded correctly.
+- Profile cookies are installed once at the browser level (`Storage.setCookies`), so every tab and
+  every browser context sees them.
 
 ## [0.2.12] - 2026-01-14
 

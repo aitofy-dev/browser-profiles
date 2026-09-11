@@ -196,6 +196,22 @@ Lower-level exports, when you want the pieces: `launchChrome`, `closeBrowser`, `
 `WEBRTC_PROTECTION_SCRIPT`, `CANVAS_PROTECTION_SCRIPT`, `WEBGL_PROTECTION_SCRIPT`,
 `AUDIO_PROTECTION_SCRIPT`.
 
+Fingerprint pieces that have to stay consistent with the running browser:
+
+```typescript
+import {
+  getProfileProtectionScripts, // the exact bundle the launcher injects for a profile fingerprint
+  createWebGLScript,       // WebGL script for one vendor/renderer pair, stable per profile
+  createWorkerSpoofScript, // wrap Worker/SharedWorker so they run the same spoof
+  pickWebGLForPlatform,    // a GPU that matches 'Win32' | 'MacIntel' | 'Linux x86_64'
+  buildUserAgent,          // reduced Chrome UA for a platform and a major version
+  buildBrands,             // Sec-CH-UA brands for that major version
+  buildUserAgentMetadata,  // payload for Network.setUserAgentOverride
+  parseChromeVersion,      // read a version out of a UA or a Browser.getVersion product string
+  resolveUserAgent,        // pinned UA wins, and reports a major-version mismatch
+} from '@aitofy/browser-profiles';
+```
+
 ## Command registry
 
 The CLI and the MCP server are generated from one array of command definitions, and it is exported,
