@@ -4,6 +4,29 @@
 
 import type { StoredProfile, LaunchOptions, LaunchResult, ProxyConfig, ProfileConfig } from '../types';
 import { BrowserProfiles } from '../profile-manager';
+import { getAllProtectionScripts } from '../fingerprint';
+
+/**
+ * Build the anti-detect bundle for a profile and add it to a Playwright
+ * context. CDP overrides set by the launcher are per-session and do not reach
+ * a context created over connectOverCDP, so we re-inject here via addInitScript.
+ */
+async function applyProtection(context: PlaywrightContextType, fingerprint?: StoredProfile['fingerprint']): Promise<void> {
+    const bundle = getAllProtectionScripts({
+        webrtc: true,
+        canvas: true,
+        webgl: fingerprint?.webgl ?? true,
+        audio: true,
+        workers: true,
+        navigator: {
+            language: fingerprint?.language || 'en-US',
+            platform: fingerprint?.platform || 'Win32',
+            hardwareConcurrency: fingerprint?.hardwareConcurrency || 8,
+            deviceMemory: fingerprint?.deviceMemory || 8,
+        },
+    });
+    await context.addInitScript(bundle);
+}
 
 // ============================================================================
 // NATIVE TYPE RE-EXPORTS
@@ -179,10 +202,12 @@ export async function withPlaywright(options: WithPlaywrightOptions): Promise<Wi
             timezoneId: profile.timezone || 'America/New_York',
             viewport: options.defaultViewport || null,
         });
+        await applyProtection(context, profile.fingerprint);
         page = await context.newPage();
     } else {
         const contexts = browser.contexts();
         context = contexts.length > 0 ? contexts[0] : await browser.newContext();
+        await applyProtection(context, profile.fingerprint);
         const pages = context.pages();
         page = pages.length > 0 ? pages[0] : await context.newPage();
     }
@@ -246,10 +271,12 @@ export async function quickLaunchPlaywright(options: QuickLaunchPlaywrightOption
             timezoneId: options.timezone || 'America/New_York',
             viewport: options.defaultViewport || null,
         });
+        await applyProtection(context, profile.fingerprint);
         page = await context.newPage();
     } else {
         const contexts = browser.contexts();
         context = contexts.length > 0 ? contexts[0] : await browser.newContext();
+        await applyProtection(context, profile.fingerprint);
         const pages = context.pages();
         page = pages.length > 0 ? pages[0] : await context.newPage();
     }

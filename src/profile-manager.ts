@@ -14,7 +14,19 @@ import type {
     LaunchResult,
 } from './types';
 import { launchChrome, closeBrowser } from './chrome-launcher';
+import { pickWebGLForPlatform } from './fingerprint';
 import os from 'os';
+
+type FingerprintConfig = NonNullable<ProfileConfig['fingerprint']>;
+
+/**
+ * Persist a platform-consistent WebGL vendor/renderer so every launch of the
+ * profile reports the same GPU
+ */
+function withDefaultWebGL(fingerprint: FingerprintConfig): FingerprintConfig {
+    if (fingerprint.webgl?.renderer) return fingerprint;
+    return { ...fingerprint, webgl: { ...pickWebGLForPlatform(fingerprint.platform), ...fingerprint.webgl } };
+}
 
 /**
  * Default storage path for profiles
@@ -162,7 +174,7 @@ export class BrowserProfiles {
             timezone: config.timezone || this.options.defaultTimezone || 'America/New_York',
             proxy: config.proxy || this.options.defaultProxy || null,
             cookies: config.cookies || [],
-            fingerprint: config.fingerprint || {},
+            fingerprint: withDefaultWebGL(config.fingerprint || {}),
             startUrls: config.startUrls || [],
             tags: config.tags || [],
             createdAt: now,
