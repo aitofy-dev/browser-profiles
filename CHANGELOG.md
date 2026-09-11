@@ -5,6 +5,58 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - Unreleased
+
+### Added
+
+- **MCP server.** `browser-profiles mcp` (also the bin `browser-profiles-mcp`) speaks the Model
+  Context Protocol over stdio, so Claude Code, Claude Desktop and Cursor can manage profiles and
+  open protected browsers. Twelve tools, one per command: `profile_list`, `profile_get`,
+  `profile_create`, `profile_update`, `profile_delete`, `profile_duplicate`, `browser_open`,
+  `browser_launch`, `browser_close`, `browser_close_all`, `browser_status`, `storage_path`.
+
+  ```bash
+  claude mcp add browser-profiles -- npx -y @aitofy/browser-profiles mcp
+  ```
+
+- **Command registry.** Every user-facing operation is one definition in `src/commands/`; the CLI
+  and the MCP server are generated from it, so they cannot drift. Exported as `commands`,
+  `getCommand()`, `createCommandContext()` and `runCommand()` for in-process use. See
+  `docs/adr/0001-command-registry.md`.
+- **`--json` on every CLI command.** Prints exactly the command's output object on stdout, with no
+  logs mixed in.
+- **`browser status`** (alias `status`, `ps`) lists running browsers with their CDP endpoints and
+  clears lock files left behind by crashed browsers.
+- **`profile update` and `profile duplicate` in the CLI**, matching the library methods.
+- **`BROWSER_PROFILES_HOME`** overrides the storage path. Precedence: `--storage-path` >
+  `BROWSER_PROFILES_HOME` > `~/.aitofy/browser-profiles`.
+- **Per-tab protection.** New page targets opened over `wsEndpoint` by an external client
+  (Playwright MCP, Puppeteer `connect`) get the same injections before the page runs, not only the
+  first tab.
+
+### Changed
+
+- CLI reorganised into a command tree (`profile create`, `browser open`, `storage path`). The old
+  short forms are kept as top-level aliases: `list`, `ls`, `info`, `create`, `open`, `launch`,
+  `close`, `delete`, `rm`, `path`.
+- All diagnostics moved to stderr and are silent unless `DEBUG=browser-profiles*` or `--verbose`.
+  stdout now belongs to `--json` and to the MCP protocol.
+- `browser-profiles path` reports the configured storage path instead of the hardcoded default.
+
+### Fixed
+
+- Fingerprint injection never ran: `Page.addScriptToEvaluateOnNewDocument` was sent before
+  `Page.enable`, so navigator overrides (platform, cores, memory) were silently ignored.
+- Every tab is now protected, not only the first. New tabs opened by Playwright MCP, Puppeteer or
+  the user are auto-attached and receive the same injections before any script runs.
+- The `Emulation.setTimezoneOverride` timezone now matches the `TZ` Chrome was started with
+  (profile, else proxy-detected, else host) instead of falling back to `America/New_York`.
+- `DEBUG=browser-profiles*` stays effective after Chrome launch (`chrome-launcher` rewrites
+  `process.env.DEBUG`).
+- Proxy URL parsing: an explicit default port (`http://host:80`) is no longer dropped, a missing
+  port is rejected with an actionable message, `socks` and `socks5h` normalise to `socks5`, and
+  percent-encoded credentials (`p%40ss`) are decoded correctly.
+
 ## [0.2.12] - 2026-01-14
 
 ### Added

@@ -1,0 +1,78 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you expected, and what happened instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: >
+        The smallest script or command sequence that shows the problem, with the exact
+        output. Remove proxy credentials before pasting.
+      render: shell
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: "@aitofy/browser-profiles version"
+      placeholder: "0.3.0 (npm ls @aitofy/browser-profiles)"
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: "macOS 15.3 / Ubuntu 24.04 / Windows 11"
+    validations:
+      required: true
+
+  - type: input
+    id: node
+    attributes:
+      label: Node version
+      placeholder: "node -v"
+    validations:
+      required: true
+
+  - type: input
+    id: chrome
+    attributes:
+      label: Chrome version
+      placeholder: "chrome://version, or `google-chrome --version`"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: How are you using it
+      options:
+        - Library (Puppeteer)
+        - Library (Playwright)
+        - CLI
+        - MCP server
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: debug-output
+    attributes:
+      label: Debug output
+      description: >
+        Re-run with `DEBUG=browser-profiles*` (or `--verbose` on the CLI) and paste the
+        stderr output. Remove proxy credentials.
+      render: shell
+    validations:
+      required: true

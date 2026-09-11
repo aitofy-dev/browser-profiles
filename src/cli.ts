@@ -1,322 +1,261 @@
 #!/usr/bin/env node
 // ============================================================================
-// @aitofy/browser-profiles CLI
+// @aitofy/browser-profiles - CLI generated from the command registry
 // ============================================================================
+// No business logic lives here: every command comes from src/commands/registry.
 
-import { Command } from 'commander';
-import { BrowserProfiles } from './profile-manager';
+import { Command, Option } from 'commander';
 import { VERSION } from './index';
+import { cliPathFor, commands, createCommandContext, getCommand, runCommand } from './commands/registry';
+import type { AnyCommandDef, CommandContext, CreateCommandContextOptions } from './commands/registry';
+import type { BrowserError } from './types';
+import {
+    collectList,
+    exampleFor,
+    mergeInput,
+    optionsFromSchema,
+    positionalsFromSchema,
+    renderCommandsHelp,
+    startedProfileId,
+} from './cli-render';
+import type { CliOption } from './cli-render';
 
-const program = new Command();
-
-// Initialize profiles manager
-const profiles = new BrowserProfiles();
-
-program
-    .name('browser-profiles')
-    .description('Self-hosted anti-detect browser profiles CLI')
-    .version(VERSION);
-
-// ============================================================================
-// List profiles
-// ============================================================================
-program
-    .command('list')
-    .alias('ls')
-    .description('List all browser profiles')
-    .option('-j, --json', 'Output as JSON')
-    .action(async (options: { json?: boolean }) => {
-        try {
-            const allProfiles = await profiles.list();
-
-            if (options.json) {
-                console.log(JSON.stringify(allProfiles, null, 2));
-                return;
-            }
-
-            if (allProfiles.length === 0) {
-                console.log('No profiles found. Create one with: browser-profiles create <name>');
-                return;
-            }
-
-            console.log('\n📋 Browser Profiles:\n');
-            console.log('ID                                    | Name              | Proxy              | Created');
-            console.log('--------------------------------------|-------------------|--------------------|-----------------');
-
-            for (const profile of allProfiles) {
-                const id = profile.id.substring(0, 36).padEnd(36);
-                const name = (profile.name || 'Unnamed').substring(0, 17).padEnd(17);
-                const proxy = profile.proxy
-                    ? `${profile.proxy.host}:${profile.proxy.port}`.substring(0, 18).padEnd(18)
-                    : 'No proxy'.padEnd(18);
-                const created = new Date(profile.createdAt).toLocaleDateString();
-
-                console.log(`${id} | ${name} | ${proxy} | ${created}`);
-            }
-
-            console.log(`\nTotal: ${allProfiles.length} profile(s)\n`);
-        } catch (error) {
-            console.error('Error listing profiles:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-// ============================================================================
-// Create profile
-// ============================================================================
-interface CreateOptions {
-    id?: string;
-    proxy?: string;
-    timezone?: string;
-    language?: string;
-    platform?: string;
+interface GlobalOptions {
+    json?: boolean;
+    verbose?: boolean;
+    storagePath?: string;
 }
 
-program
-    .command('create <name>')
-    .description('Create a new browser profile')
-    .option('-i, --id <id>', 'Custom profile ID (alphanumeric + hyphen/underscore, 1-64 chars)')
-    .option('-p, --proxy <url>', 'Proxy URL (e.g., http://user:pass@host:port)')
-    .option('-t, --timezone <tz>', 'Timezone (e.g., America/New_York)')
-    .option('-l, --language <lang>', 'Language (e.g., en-US)')
-    .option('--platform <platform>', 'Platform (Win32, MacIntel, Linux x86_64)')
-    .action(async (name: string, options: CreateOptions) => {
-        try {
-            // Parse proxy URL if provided
-            let proxy;
-            if (options.proxy) {
-                const url = new URL(options.proxy);
-                proxy = {
-                    type: url.protocol.replace(':', '') as 'http' | 'https' | 'socks5',
-                    host: url.hostname,
-                    port: parseInt(url.port) || 8080,
-                    username: url.username || undefined,
-                    password: url.password || undefined,
-                };
-            }
-
-            const profile = await profiles.create({
-                id: options.id,
-                name,
-                proxy,
-                timezone: options.timezone,
-                fingerprint: {
-                    language: options.language,
-                    platform: options.platform,
-                },
-            });
-
-            console.log('\n✅ Profile created successfully!\n');
-            console.log(`ID:       ${profile.id}`);
-            console.log(`Name:     ${profile.name}`);
-            if (proxy) {
-                console.log(`Proxy:    ${proxy.host}:${proxy.port}`);
-            }
-            if (options.timezone) {
-                console.log(`Timezone: ${options.timezone}`);
-            }
-            console.log(`\nLaunch with: browser-profiles open ${profile.id}`);
-            console.log(`        or: browser-profiles open "${profile.name}"\n`);
-        } catch (error) {
-            console.error('Error creating profile:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-// ============================================================================
-// Delete profile
-// ============================================================================
-program
-    .command('delete <idOrName>')
-    .alias('rm')
-    .description('Delete a browser profile by ID or name')
-    .option('-f, --force', 'Skip confirmation')
-    .action(async (idOrName: string) => {
-        try {
-            const profile = await profiles.getByIdOrName(idOrName);
-            if (!profile) {
-                console.error(`Profile not found: ${idOrName}`);
-                process.exit(1);
-            }
-
-            const success = await profiles.delete(profile.id);
-
-            if (success) {
-                console.log(`\n✅ Profile deleted: ${profile.name || profile.id}\n`);
-            } else {
-                console.error('Failed to delete profile');
-                process.exit(1);
-            }
-        } catch (error) {
-            console.error('Error deleting profile:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-// ============================================================================
-// Show profile info
-// ============================================================================
-program
-    .command('info <idOrName>')
-    .description('Show profile details by ID or name')
-    .option('-j, --json', 'Output as JSON')
-    .action(async (idOrName: string, options: { json?: boolean }) => {
-        try {
-            const profile = await profiles.getByIdOrName(idOrName);
-            if (!profile) {
-                console.error(`Profile not found: ${idOrName}`);
-                process.exit(1);
-            }
-
-            if (options.json) {
-                console.log(JSON.stringify(profile, null, 2));
-                return;
-            }
-
-            console.log('\n📋 Profile Details:\n');
-            console.log(`ID:         ${profile.id}`);
-            console.log(`Name:       ${profile.name || 'Unnamed'}`);
-            console.log(`Created:    ${new Date(profile.createdAt).toLocaleString()}`);
-            console.log(`Updated:    ${new Date(profile.updatedAt).toLocaleString()}`);
-
-            if (profile.proxy) {
-                console.log(`\nProxy:`);
-                console.log(`  Type:     ${profile.proxy.type}`);
-                console.log(`  Host:     ${profile.proxy.host}`);
-                console.log(`  Port:     ${profile.proxy.port}`);
-                if (profile.proxy.username) {
-                    console.log(`  Username: ${profile.proxy.username}`);
-                }
-            }
-
-            if (profile.timezone) {
-                console.log(`\nTimezone:   ${profile.timezone}`);
-            }
-
-            if (profile.fingerprint) {
-                console.log(`\nFingerprint:`);
-                if (profile.fingerprint.language) console.log(`  Language: ${profile.fingerprint.language}`);
-                if (profile.fingerprint.platform) console.log(`  Platform: ${profile.fingerprint.platform}`);
-                if (profile.fingerprint.userAgent) console.log(`  UA:       ${profile.fingerprint.userAgent.substring(0, 50)}...`);
-            }
-
-            console.log('');
-        } catch (error) {
-            console.error('Error getting profile:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-// ============================================================================
-// Open browser with profile
-// ============================================================================
-program
-    .command('open <idOrName>')
-    .description('Open browser with a profile (by ID or name)')
-    .option('-h, --headless', 'Run in headless mode')
-    .action(async (idOrName: string, options: { headless?: boolean }) => {
-        try {
-            const profile = await profiles.getByIdOrName(idOrName);
-            if (!profile) {
-                console.error(`Profile not found: ${idOrName}`);
-                process.exit(1);
-            }
-
-            console.log(`\n🚀 Launching browser for: ${profile.name || profile.id}`);
-
-            const result = await profiles.launch(profile.id, {
-                headless: options.headless || false,
-            });
-
-            console.log(`\n✅ Browser launched!`);
-            console.log(`   WebSocket: ${result.wsEndpoint}`);
-            console.log(`   PID: ${result.pid}`);
-            console.log(`\nPress Ctrl+C to close the browser.\n`);
-
-            // Keep process alive
-            process.on('SIGINT', async () => {
-                console.log('\nClosing browser...');
-                await result.close();
-                process.exit(0);
-            });
-
-            // Prevent exit
-            await new Promise(() => { });
-        } catch (error) {
-            console.error('Error launching browser:', (error as Error).message);
-            process.exit(1);
-        }
-    });
-
-// ============================================================================
-// Quick launch
-// ============================================================================
-interface LaunchOptions {
-    proxy?: string;
-    headless?: boolean;
-    random?: boolean;
+/** Everything the CLI touches outside itself, injectable so tests stay in-process. */
+export interface CliIo {
+    stdout?(text: string): void;
+    stderr?(text: string): void;
+    setExitCode?(code: number): void;
+    createContext?(opts: CreateCommandContextOptions): CommandContext;
 }
 
-program
-    .command('launch')
-    .description('Quick launch browser without saving profile')
-    .option('-p, --proxy <url>', 'Proxy URL')
-    .option('-h, --headless', 'Run in headless mode')
-    .option('--random', 'Use random fingerprint')
-    .action(async (options: LaunchOptions) => {
+type Execute = (def: AnyCommandDef, input: Record<string, unknown>, globals: GlobalOptions) => Promise<void>;
+
+/** Repeated on every subcommand so they work before or after the command name. */
+const GLOBAL_OPTIONS: ReadonlyArray<{ key: string; flags: string; description: string }> = [
+    { key: 'json', flags: '--json', description: 'Print the raw command output as one line of JSON.' },
+    { key: 'verbose', flags: '--verbose', description: 'Log progress and debug detail to stderr.' },
+    {
+        key: 'storagePath',
+        flags: '--storage-path <dir>',
+        description: 'Directory holding profiles. Overrides BROWSER_PROFILES_HOME.',
+    },
+];
+
+function addOption(command: Command, spec: CliOption): void {
+    const option = new Option(spec.flags, spec.description);
+    if (spec.kind === 'number') option.argParser((value: string) => Number(value));
+    if (spec.kind === 'array') option.argParser(collectList);
+    if (spec.required) option.makeOptionMandatory(true);
+    command.addOption(option);
+    // Defined after the value flag so commander keeps the field undefined by default.
+    if (spec.clearFlag) {
+        command.addOption(new Option(spec.clearFlag, `Clear ${spec.key} (sends null).`));
+    }
+}
+
+function addGlobalOptions(command: Command, taken: ReadonlySet<string>): void {
+    for (const global of GLOBAL_OPTIONS) {
+        if (!taken.has(global.key)) command.option(global.flags, global.description);
+    }
+}
+
+const SHUTDOWN_SIGNALS: NodeJS.Signals[] = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+
+function waitForShutdown(): Promise<void> {
+    return new Promise((resolve) => {
+        const stop = (): void => {
+            for (const signal of SHUTDOWN_SIGNALS) process.off(signal, stop);
+            process.stdin.off('end', stop);
+            process.stdin.pause();
+            resolve();
+        };
+        for (const signal of SHUTDOWN_SIGNALS) process.on(signal, stop);
+        process.stdin.on('end', stop);
+        process.stdin.resume();
+    });
+}
+
+/**
+ * Last resort for a death no handler survives: 'exit' allows synchronous work only,
+ * so the browser gets one signal and nothing else.
+ */
+function killOnExit(pid: number | undefined): () => void {
+    if (typeof pid !== 'number' || pid <= 0) return () => undefined;
+    const kill = (): void => {
         try {
-            // Dynamic import to avoid loading puppeteer at startup
-            const { createSession } = await import('./integrations/puppeteer');
-
-            let proxy;
-            if (options.proxy) {
-                const url = new URL(options.proxy);
-                proxy = {
-                    type: url.protocol.replace(':', '') as 'http' | 'https' | 'socks5',
-                    host: url.hostname,
-                    port: parseInt(url.port) || 8080,
-                    username: url.username || undefined,
-                    password: url.password || undefined,
-                };
-            }
-
-            console.log('\n🚀 Quick launching browser...');
-
-            const session = await createSession({
-                proxy,
-                headless: options.headless || false,
-                randomFingerprint: options.random !== false,
-            });
-
-            console.log(`\n✅ Browser launched!`);
-            console.log(`   Session: ${session.session.id}`);
-            console.log(`\nPress Ctrl+C to close the browser.\n`);
-
-            // Keep process alive
-            process.on('SIGINT', async () => {
-                console.log('\nClosing browser...');
-                await session.close();
-                process.exit(0);
-            });
-
-            // Prevent exit
-            await new Promise(() => { });
-        } catch (error) {
-            console.error('Error launching browser:', (error as Error).message);
-            process.exit(1);
+            process.kill(pid, 'SIGTERM');
+        } catch {
+            // Already gone, or never ours to kill.
         }
-    });
+    };
+    process.on('exit', kill);
+    return () => process.off('exit', kill);
+}
 
-// ============================================================================
-// Show storage path
-// ============================================================================
-program
-    .command('path')
-    .description('Show profiles storage path')
-    .action(() => {
-        const storagePath = process.env.HOME + '/.aitofy/browser-profiles';
-        console.log(`\n📁 Profiles stored at: ${storagePath}\n`);
-    });
+function startedPid(output: unknown): number | undefined {
+    if (typeof output !== 'object' || output === null) return undefined;
+    const { pid } = output as { pid?: unknown };
+    return typeof pid === 'number' ? pid : undefined;
+}
 
-// Parse and run
-program.parse();
+export function buildProgram(io: CliIo = {}): Command {
+    const out = io.stdout ?? ((text: string) => void process.stdout.write(text));
+    const err = io.stderr ?? ((text: string) => void process.stderr.write(text));
+    const setExitCode = io.setExitCode ?? ((code: number) => void (process.exitCode = code));
+    const makeContext = io.createContext ?? createCommandContext;
+
+    const program = new Command();
+    program
+        .name('browser-profiles')
+        .description('Self-hosted anti-detect browser profiles.')
+        .version(VERSION)
+        .showHelpAfterError()
+        // The generated section below replaces commander's list, including its `help` entry.
+        .helpCommand(false)
+        .configureOutput({ writeOut: out, writeErr: err })
+        .exitOverride((error) => {
+            if (error.exitCode !== 0) setExitCode(error.exitCode);
+            throw error;
+        });
+    addGlobalOptions(program, new Set());
+
+    // Built lazily: importing the CLI must not create the storage directory.
+    let context: CommandContext | undefined;
+    const ctx = (globals: GlobalOptions): CommandContext => {
+        if (!context) {
+            context = makeContext({ storagePath: globals.storagePath, verbose: globals.verbose });
+        }
+        return context;
+    };
+
+    const report = (error: BrowserError, asJson: boolean): void => {
+        err(asJson
+            ? `${JSON.stringify({ error: { code: error.code, message: error.message } })}\n`
+            : `error: ${error.message} (${error.code})\n`);
+        // ADR 0001: every Err exits 1, INTERNAL included.
+        setExitCode(1);
+    };
+
+    const keepAlive = async (def: AnyCommandDef, output: unknown, globals: GlobalOptions): Promise<void> => {
+        err('Browser is open. Press Ctrl+C to close it and exit.\n');
+        const cancelKillOnExit = killOnExit(startedPid(output));
+        await waitForShutdown();
+        const profileId = startedProfileId(output);
+        const close = getCommand('browser.close');
+        if (!profileId || !close) {
+            err(`warning: "${def.name}" exposed no profile to close; the browser is still running.\n`);
+            return;
+        }
+        const closed = await runCommand(ctx(globals), close, { idOrName: profileId });
+        cancelKillOnExit();
+        if (!closed.ok) report(closed.error, globals.json === true);
+    };
+
+    const execute: Execute = async (def, input, globals) => {
+        let result;
+        try {
+            result = await runCommand(ctx(globals), def, input);
+        } catch (thrown) {
+            // runCommand never throws, so only building the context can: report it like any Err.
+            const message = thrown instanceof Error ? thrown.message : String(thrown);
+            return report({ code: 'INTERNAL', message: `Could not open the profile storage: ${message}` },
+                globals.json === true);
+        }
+        if (!result.ok) return report(result.error, globals.json === true);
+
+        if (globals.json === true) {
+            out(`${JSON.stringify(result.data)}\n`);
+        } else {
+            const text = def.render(result.data);
+            out(text.endsWith('\n') ? text : `${text}\n`);
+        }
+
+        if (def.cli?.keepAlive === true) await keepAlive(def, result.data, globals);
+    };
+
+    for (const def of commands) registerCommand(program, def, execute);
+    registerMcp(program, ctx);
+    program.addHelpText('after', renderCommandsHelp(commands));
+
+    return program;
+}
+
+/** The nested path plus each top-level alias, all sharing one configuration. */
+function registerCommand(program: Command, def: AnyCommandDef, execute: Execute): void {
+    const path = cliPathFor(def);
+    let parent = program;
+    for (const segment of path.slice(0, -1)) {
+        parent = parent.commands.find((child) => child.name() === segment)
+            // Hidden at the root, which lists the generated groups instead.
+            ?? parent.command(segment, { hidden: true })
+                .description(`${segment} commands`)
+                .helpCommand(false)
+                .configureOutput(program.configureOutput());
+    }
+    // Visible inside its group, so "profile --help" lists what the group holds.
+    configure(parent.command(path[path.length - 1]), def, execute);
+    for (const alias of def.cli?.aliases ?? []) {
+        configure(program.command(alias, { hidden: true }), def, execute);
+    }
+}
+
+function configure(command: Command, def: AnyCommandDef, execute: Execute): void {
+    const positionalKeys = def.cli?.positional ?? [];
+    const specs = optionsFromSchema(def.input, positionalKeys);
+
+    command.description(def.description);
+    for (const positional of positionalsFromSchema(def.input, positionalKeys)) {
+        command.argument(positional.arg, positional.description);
+    }
+    for (const spec of specs) addOption(command, spec);
+    addGlobalOptions(command, new Set(specs.map((spec) => spec.key)));
+
+    const aliases = def.cli?.aliases ?? [];
+    if (aliases.length > 0) command.addHelpText('after', `\nAliases: ${aliases.join(', ')}\n`);
+    const example = exampleFor(def);
+    if (example) command.addHelpText('after', `\nExample:\n  ${example}\n`);
+
+    command.action(async (...args: unknown[]) => {
+        const self = args[args.length - 1] as Command;
+        const options = self.optsWithGlobals();
+        await execute(
+            def,
+            mergeInput(positionalKeys, args.slice(0, positionalKeys.length), options, specs),
+            options as GlobalOptions
+        );
+    });
+}
+
+/** Dynamic import so the MCP SDK never loads for a plain CLI call. */
+function registerMcp(program: Command, ctx: (globals: GlobalOptions) => CommandContext): void {
+    const command = program
+        .command('mcp', { hidden: true })
+        .description('Serve every registry command as MCP tools over stdio.');
+    addGlobalOptions(command, new Set());
+    command.action(async () => {
+        const globals = command.optsWithGlobals() as GlobalOptions;
+        const { startMcpServer } = await import('./mcp');
+        await startMcpServer({ storagePath: ctx(globals).storagePath, verbose: globals.verbose });
+    });
+}
+
+async function main(): Promise<void> {
+    try {
+        await buildProgram().parseAsync(process.argv);
+    } catch (thrown) {
+        // Commander already wrote its message and the exit code is set.
+        if (typeof thrown === 'object' && thrown !== null && 'exitCode' in thrown) return;
+        throw thrown;
+    }
+}
+
+// True only for the CommonJS bin; the ESM build of this entry never self-runs.
+if (typeof require !== 'undefined' && typeof module !== 'undefined' && require.main === module) {
+    void main();
+}

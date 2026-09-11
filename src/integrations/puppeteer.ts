@@ -4,6 +4,9 @@
 
 import type { StoredProfile, LaunchOptions, LaunchResult, ProxyConfig, ProfileConfig } from '../types';
 import { BrowserProfiles } from '../profile-manager';
+import { createLogger } from '../log';
+
+const log = createLogger('puppeteer');
 
 // ============================================================================
 // NATIVE TYPE RE-EXPORTS
@@ -209,7 +212,7 @@ async function getPuppeteer(): Promise<any> {
     for (const pkg of packages) {
         try {
             const module = await import(pkg.name);
-            console.log(`[browser-profiles] Using ${pkg.label}`);
+            log.debug(`Using ${pkg.label}`);
             // Handle both ESM default export and CJS module.exports
             return module.default || module;
         } catch {
@@ -922,7 +925,7 @@ export async function patchPage(page: PuppeteerPage, options: PatchPageOptions =
         `);
     }
 
-    console.log('[browser-profiles] Page patched with anti-detect protections');
+    log.debug('Page patched with anti-detect protections');
 }
 
 /**
@@ -1148,7 +1151,7 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
         createdAt: new Date(),
     };
 
-    console.log(`[browser-profiles] Session created: ${sessionId} (${temporary ? 'temporary' : 'persistent'})`);
+    log.info(`Session created: ${sessionId} (${temporary ? 'temporary' : 'persistent'})`);
 
     // Close function - by default only closes this session's page
     const close = async (closeOptions?: { terminate?: boolean }) => {
@@ -1156,11 +1159,11 @@ export async function createSession(options: CreateSessionOptions = {}): Promise
             if (closeOptions?.terminate) {
                 // Kill the entire browser
                 await browser.close();
-                console.log(`[browser-profiles] Session terminated: ${sessionId}`);
+                log.info(`Session terminated: ${sessionId}`);
             } else {
                 // Only close this session's page
                 await page.close().catch(() => { });
-                console.log(`[browser-profiles] Session page closed: ${sessionId}`);
+                log.debug(`Session page closed: ${sessionId}`);
             }
         } catch {
             // Ignore close errors

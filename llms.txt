@@ -1,186 +1,231 @@
 # @aitofy/browser-profiles
 
-> Self-hosted anti-detect browser profiles. The open-source alternative to AdsPower & Multilogin.
+Self-hosted anti-detect browser profiles. The open-source alternative to AdsPower and Multilogin.
+One package, three faces: a TypeScript library, a CLI, and an MCP server for AI agents.
+npm: @aitofy/browser-profiles. License MIT. Node >= 18. Zero telemetry.
 
-## What is this?
+## Index
 
-Like n8n for automation or Affine for notes, this is AdsPower for developers — self-hosted, open-source, and privacy-first. A TypeScript/JavaScript library for managing anti-detect browser profiles.
+This file is the whole story in one page. The same material, split up, lives next to it:
 
-## Why Self-Hosted?
+  docs/library.md             Library API: quickLaunch, BrowserProfiles, Puppeteer, Playwright, command registry.
+  docs/cli.md                 Every CLI command, alias and flag, the --json contract, keepAlive, --detached.
+  docs/mcp.md                 MCP setup per client, the tools table, error shape, browser ownership.
+  docs/playwright-mcp.md      Hand a wsEndpoint to Playwright MCP or any CDP client.
+  docs/configuration.md       Storage path precedence, Chrome path, logging, on-disk layout.
+  docs/anti-detect.md         What is protected, per-tab injection, scores, honest limits.
+  docs/browser-lifecycle.md   Who owns the browser, reuse, cross-process close, detached trade-offs.
+  docs/troubleshooting.md     Common failures with their exact message and the fix.
+  docs/adr/0001-command-registry.md  Why one registry generates the CLI, the MCP server and the library API.
+  examples/                   Runnable files: quick launch, proxy profile, Playwright, JSON pipeline, MCP.
+  README.md                   Landing page. CONTRIBUTING.md, SECURITY.md, CHANGELOG.md as usual.
 
-- Data stays on your machine (no cloud dependency)
-- Zero telemetry, zero tracking
-- Free forever (no subscriptions)
-- Full control over your profiles
+## What it does
 
-## Key Features
+Stores browser profiles locally (proxy, timezone, fingerprint, cookies, Chrome user data) and
+launches real Chrome with anti-detect injections applied over CDP: WebRTC, Canvas, WebGL, Audio,
+navigator, timezone. Authenticated proxies are handled by a local relay. Profiles persist between
+runs, so logins survive.
 
-- Self-hosted profile storage (data stays local)
-- 95% anti-detect score (WebRTC, Canvas, Audio protection)
-- Auto timezone detection from proxy IP
-- Proxy support with authentication (HTTP, HTTPS, SOCKS5)
-- Puppeteer and Playwright integration
-- Zero config, works out of the box
-- **NEW: Simplified imports** - all functions from one entry point
+Anti-detect scores: browserleaks.com 100%, pixelscan.net 100%, browserscan.net 95%, creepjs 85%.
+95% is the ceiling for Puppeteer/Playwright; 100% needs a modified Chromium.
 
 ## Installation
 
-```bash
-# Recommended: rebrowser-puppeteer-core (better anti-detect!)
 npm install @aitofy/browser-profiles rebrowser-puppeteer-core
+npm install -g @aitofy/browser-profiles   # for the CLI and the MCP server
 
-# Or standard puppeteer
-npm install @aitofy/browser-profiles puppeteer-core
-```
+## MCP server
 
-## Anti-Detect Status
+Start command: `browser-profiles mcp` (also installed as the bin `browser-profiles-mcp`).
+Transport: stdio. Flags: --storage-path <dir>, --verbose.
 
-- browserleaks.com: 100% passed
-- pixelscan.net: 100% passed
-- browserscan.net: 95% (Bot Control -5%, Puppeteer limitation)
-- creepjs: 85% passed
+Client config (Claude Desktop, Cursor, any MCP client that takes a command):
 
-Note: 95% is the best achievable with Puppeteer/Playwright. 100% requires modified Chromium.
+  {"mcpServers": {"browser-profiles": {"command": "npx", "args": ["-y", "@aitofy/browser-profiles", "mcp"]}}}
 
-## CLI Tool
+Claude Code one-liner:
 
-Install globally: npm install -g @aitofy/browser-profiles
+  claude mcp add browser-profiles -- npx -y @aitofy/browser-profiles mcp
 
-Commands:
-- browser-profiles list - List all profiles
-- browser-profiles create <name> - Create new profile
-- browser-profiles open <id> - Open browser with profile
-- browser-profiles launch - Quick launch with random fingerprint
-- browser-profiles info <id> - Show profile details
-- browser-profiles delete <id> - Delete profile
-- browser-profiles path - Show storage path
+### The flow an agent should follow
 
-## Quick Examples
+1. profile_create {name: "Acme Main", id: "acme-main", proxy: "http://user:pass@host:8080"}
+   -> a StoredProfile with an id.
+2. browser_open {idOrName: "acme-main"}
+   -> {profileId, wsEndpoint, port, pid, reused}.
+3. Use wsEndpoint. It is a CDP WebSocket URL:
+   - Playwright MCP: start it with --cdp-endpoint <wsEndpoint>
+   - Puppeteer: puppeteer.connect({browserWSEndpoint: wsEndpoint})
+   - Playwright: chromium.connectOverCDP(wsEndpoint)
+   Tabs opened by that client are protected as well; the launcher re-applies the injections to
+   every new page target.
+4. browser_close {idOrName: "acme-main"} when done.
 
-### Quick launch (simplest)
+Calling browser_open twice for the same profile does not start a second Chrome: it returns the
+running endpoint with reused: true.
 
-```typescript
-import { quickLaunch } from '@aitofy/browser-profiles';
+### MCP tools
 
-const { page, close } = await quickLaunch({
-  proxy: { type: 'http', host: 'proxy.example.com', port: 8080 },
-});
+profile_list        List stored profiles.
+                    args: groupId? (string, exact match), tag? (string, exact match)
+                    out: StoredProfile[]
+profile_get         Show one profile with proxy and fingerprint.
+                    args: idOrName (string, required)
+                    out: StoredProfile
+profile_create      Create a profile with its own storage, proxy and fingerprint.
+                    args: name (required), id?, proxy?, timezone?, language?, platform?, tags?, notes?
+                    out: StoredProfile
+profile_update      Change fields of a profile; omitted fields stay as they are.
+                    args: idOrName (required), name?, proxy? (null removes the proxy), timezone?,
+                          language?, platform?, tags?, notes?
+                    out: StoredProfile
+profile_delete      Delete a profile and all of its browser data. Irreversible.
+                    args: idOrName (required), force? (boolean, closes a running browser first)
+                    out: {id, deleted: true}
+profile_duplicate   Copy a profile's settings into a new profile with a new id.
+                    args: idOrName (required), name? (defaults to "<source name> (Copy)")
+                    out: StoredProfile
+browser_open        Open Chrome with a stored profile and return its CDP endpoint.
+                    args: idOrName (required), headless? (default false), startUrl? (absolute URL),
+                          detached? (default false; true = Chrome outlives the caller, reduced protection)
+                    out: {profileId, wsEndpoint, port, pid, reused}
+browser_launch      Throwaway Chrome with a random fingerprint and no saved profile. Nothing persists.
+                    args: proxy?, headless? (default false), randomFingerprint? (default true), detached? (default false)
+                    out: {profileId, wsEndpoint, port, pid, temporary: true}
+browser_close       Close the browser of a profile, from any process (reads its lock file).
+                    args: idOrName (required; also accepts a tmp-... id from browser_launch)
+                    out: {profileId, closed}
+browser_close_all   Close every browser started from this storage path, temporary ones included.
+                    args: none
+                    out: {closed: string[]}
+browser_status      Running browsers with their CDP endpoints. Stale lock files are cleaned up.
+                    args: none
+                    out: {running: [{profileId, pid, port, wsEndpoint, startedAt, temporary}]}
+storage_path        Directory where profiles and browser data are stored.
+                    args: none
+                    out: {path}
 
-await page.goto('https://whoer.net');
-await close();
-```
+### Argument formats
 
-### Temporary session with random fingerprint
+idOrName    A profile id ("acme-main", or a random 16-hex-character id) or the exact profile name,
+            case-insensitive ("Acme Main"). Ids are tried first. Use profile_list to discover both.
+id          1-64 characters of letters, digits, hyphen or underscore. Must not already exist.
+proxy       A URL with an explicit port: <scheme>://[user:pass@]host:port
+            Schemes: http, https, socks5 (socks and socks5h are normalised to socks5).
+            Percent-encode reserved characters in credentials: "http://bob:p%40ss@10.0.0.1:8080".
+timezone    IANA id, e.g. "America/New_York". Match it to the proxy exit country.
+language    BCP 47 tag, e.g. "en-US", "vi-VN". Default "en-US".
+platform    Exactly one of "Win32", "MacIntel", "Linux x86_64". Must agree with the user agent.
+tags        Array of strings, e.g. ["facebook", "client-acme"].
+notes       Free-form string stored with the profile. Not sent to the browser.
+startUrl    Absolute URL opened in the first tab.
 
-```typescript
-import { createSession } from '@aitofy/browser-profiles';
+### Errors
 
-const session = await createSession({
-  randomFingerprint: true,
-  proxy: { type: 'http', host: 'proxy.com', port: 8080 },
-});
+Tools never throw. A failure comes back as an error result carrying a code and a message:
+PROFILE_NOT_FOUND (the message suggests close matches), INVALID_CONFIG, CHROME_NOT_FOUND,
+LAUNCH_FAILED, STORAGE_ERROR, INTERNAL.
 
-await session.page.goto('https://example.com');
-await session.close();
-```
+## CLI
 
-### Apply patches to existing page
+Command tree, with the short top-level alias in brackets. Every command accepts --json,
+--storage-path <dir> and --verbose.
 
-```typescript
-import { patchPage } from '@aitofy/browser-profiles';
+browser-profiles profile list [list, ls]            --group-id <id> --tag <tag>
+browser-profiles profile get <idOrName> [info]
+browser-profiles profile create <name> [create]     --id --proxy --timezone --language --platform --tags --notes
+browser-profiles profile update <idOrName> [update] --name --proxy --timezone --language --platform --tags --notes
+browser-profiles profile delete <idOrName> [delete, rm]  --force
+browser-profiles profile duplicate <idOrName> [duplicate] --name
+browser-profiles browser open <idOrName> [open]     --headless --start-url <url> --detached
+browser-profiles browser launch [launch]            --proxy --headless --no-random-fingerprint --detached
+browser-profiles browser close <idOrName> [close]
+browser-profiles browser close-all [close-all]
+browser-profiles browser status [status, ps]
+browser-profiles storage path [path]
+browser-profiles mcp                                --storage-path <dir> --verbose
 
-await patchPage(existingPage, {
-  webdriver: true,
-  plugins: true,
-  webrtc: true,
-  fingerprint: { platform: 'Win32' },
-});
-```
+--tags can be repeated or take a comma-separated list. --json prints exactly the command output
+object on stdout, nothing else, so it can be piped into jq. On failure the CLI writes
+{"error":{"code":"...","message":"..."}} to stderr and exits non-zero.
 
-### Generate fingerprints
+Example pipeline:
 
-```typescript
-import { generateFingerprint, getFingerprintScripts } from '@aitofy/browser-profiles';
+  browser-profiles create "Acme Main" --id acme-main --proxy http://user:pass@proxy.com:8080 --json
+  sleep 300 | browser-profiles open acme-main --json >/tmp/open.json &   # keeps stdin open
+  WS=$(jq -r .wsEndpoint /tmp/open.json)
+  npx -y @playwright/mcp@latest --cdp-endpoint "$WS"
+  browser-profiles close acme-main
 
-const fp = generateFingerprint({
-  platform: 'macos',
-  gpu: 'apple',
-  language: 'ja-JP',
-});
+## Configuration
 
-const scripts = getFingerprintScripts(fp);
-await page.evaluateOnNewDocument(scripts);
-```
+Storage path precedence: --storage-path <dir> > BROWSER_PROFILES_HOME > ~/.aitofy/browser-profiles.
+On Windows the default is C:\Users\<user>\.aitofy\browser-profiles.
 
-### Profile management
+Diagnostics go to stderr only, so stdout stays clean for --json and for the MCP stdio protocol.
+They are silent unless DEBUG=browser-profiles* is set or --verbose is passed.
 
-```typescript
-import { BrowserProfiles, withPuppeteer } from '@aitofy/browser-profiles';
+## Browser lifecycle
 
-const profiles = new BrowserProfiles();
+The process that launches Chrome owns it: the authenticated-proxy relay and the anti-detect
+injections live there.
+- MCP server: browser_open returns immediately, the server keeps the browser protected while it
+  runs, and closes every browser it opened when it exits. A browser it only reused (reused: true)
+  belongs to another process and is left running.
+- CLI: browser open and browser launch print the endpoint and then stay in the foreground so the
+  browser keeps its protection. Ctrl+C, SIGTERM, or the CLI's stdin closing closes the browser and
+  exits. In a script, background it with a stdin that stays open, or read the endpoint from
+  browser_status instead.
+- detached opts out: CLI --detached, MCP detached: true, library profiles.launch(id, {detached: true}).
+  Chrome outlives the caller but with flag-level protection only, no authenticated-proxy relay,
+  injections on the first tab only. Use for one-shot scripts: browser-profiles open acme --detached --json.
+- browser_close / browser close works from any process by reading the profile lock file.
 
-const profile = await profiles.create({
-  name: 'My Account',
-  proxy: { type: 'http', host: 'proxy.example.com', port: 8080 },
-});
+## Library API
 
-const { page, close } = await withPuppeteer({ profile: profile.id });
-await page.goto('https://example.com');
-await close();
-```
+Everything below is imported from '@aitofy/browser-profiles'.
 
-## API Summary
+quickLaunch({proxy, timezone, fingerprint})   Launch an anti-detect browser, no saved profile.
+                                              Returns {browser, page, close}.
+withPuppeteer({profile})                      Launch a stored profile and connect Puppeteer.
+withPlaywright({profile})                     Same for Playwright ('@aitofy/browser-profiles/playwright').
+createSession({temporary, randomFingerprint}) Throwaway session with a random fingerprint.
+patchPage(page, options)                      Apply anti-detect patches to a page you already have.
+generateFingerprint(options)                  Build a consistent random fingerprint.
+getFingerprintScripts(fingerprint)            Injection scripts for that fingerprint.
+launchChromeStandalone(options)               Launch Chrome with no profile management.
+parseProxyUrl(url) / formatProxyUrl(config)   Proxy URL <-> ProxyConfig.
+createLogger(namespace)                       stderr logger used by the package.
 
-### Main Functions (import from '@aitofy/browser-profiles')
+BrowserProfiles class:
+  new BrowserProfiles({storagePath?, chromePath?, defaultTimezone?, defaultProxy?})
+  create(config), get(id), getByName(name), getByIdOrName(idOrName), list(options?),
+  update(id, updates), delete(id), duplicate(id, name?), export(id), import(json),
+  launch(id, options?), launchByName(name, options?), launchByIdOrName(idOrName, options?),
+  close(id), closeAll(), createGroup(name, description?), moveToGroup(id, groupId), listGroups()
 
-- `quickLaunch({ proxy, timezone })` - Quick launch without saved profile
-- `createSession({ randomFingerprint })` - Temporary session with random fingerprint
-- `patchPage(page, options)` - Apply anti-detect patches to existing page
-- `generateFingerprint(options)` - Generate browser fingerprint on-demand
-- `getFingerprintScripts(fingerprint)` - Get injection scripts for fingerprint
-- `withPuppeteer({ profile })` - Launch profile and connect Puppeteer
-- `launchChromeStandalone(options)` - Launch Chrome without profile management
+Command registry (the same definitions the CLI and MCP are generated from):
+  createCommandContext({storagePath?, verbose?}), getCommand('browser.open'), commands,
+  runCommand(ctx, def, input) -> Result<O, BrowserError>, resolveStoragePath(explicit?)
 
-### BrowserProfiles class
+Commands return a Result ({ok: true, data} or {ok: false, error}) and never throw.
 
-- `create(config)` - Create new profile
-- `launch(id)` - Launch browser for profile
-- `list()` - List all profiles
-- `get(id)` - Get profile by ID
-- `update(id, updates)` - Update profile
-- `delete(id)` - Delete profile
+Minimal library example:
 
-### Playwright integration
+  import { BrowserProfiles } from '@aitofy/browser-profiles';
+  const profiles = new BrowserProfiles();
+  const profile = await profiles.create({ name: 'Acme Main', timezone: 'America/New_York' });
+  const { wsEndpoint, close } = await profiles.launch(profile.id);
+  await close();
 
-- `withPlaywright({ profile })` - Launch profile and connect Playwright
+## Use cases
 
-### ExTower client
-
-- `createProfile(options)` - Create ExTower profile
-- `launchBrowser(userId)` - Launch and get WebSocket URL
-- `listProfiles()` - List all profiles
-- `deleteProfile(userId)` - Delete profile
-
-## Use Cases
-
-1. **Multi-account management** - Run multiple social media or e-commerce accounts
-2. **Web scraping** - Avoid IP bans with rotating proxies and fingerprints
-3. **Testing** - Test websites with different browser configurations
-4. **Automation** - Automate tasks across multiple isolated browser sessions
-
-## Related Searches
-
-- antidetect browser npm
-- puppeteer multi profile
-- extower api nodejs
-- multilogin alternative free
-- browser fingerprint protection
-- puppeteer proxy authentication
-- playwright antidetect
-- scraping fingerprint evasion
+Multi-account management, web scraping behind rotating proxies, testing with different browser
+configurations, and letting an AI agent run isolated browser sessions through MCP.
 
 ## Links
 
-- npm: https://www.npmjs.com/package/@aitofy/browser-profiles
-- GitHub: https://github.com/aitofy-dev/browser-profiles
-- Documentation: https://aitofy.dev/browser-profiles
+npm: https://www.npmjs.com/package/@aitofy/browser-profiles
+GitHub: https://github.com/aitofy-dev/browser-profiles
+Docs: https://aitofy.dev/browser-profiles

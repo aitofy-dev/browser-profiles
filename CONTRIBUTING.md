@@ -1,152 +1,122 @@
 # Contributing to browser-profiles
 
-Thank you for considering contributing to browser-profiles! 🎉
-
-## Quick Start
+## Quick start
 
 ```bash
-# Clone the repo
 git clone https://github.com/aitofy-dev/browser-profiles.git
 cd browser-profiles
-
-# Install dependencies
 npm install
 
-# Build
-npm run build
-
-# Test manually
-npx tsx test.ts
+npm test          # vitest run
+npm run typecheck # tsc --noEmit
+npm run build     # tsup
 ```
 
-## Development Workflow
+All three must pass before you open a pull request. CI runs the same three on Node 20 and 22.
 
-### 1. Fork & Clone
-
-```bash
-git clone https://github.com/YOUR-USERNAME/browser-profiles.git
-cd browser-profiles
-git remote add upstream https://github.com/aitofy-dev/browser-profiles.git
-```
-
-### 2. Create a Branch
-
-```bash
-git checkout -b feature/my-feature
-```
-
-### 3. Make Changes
-
-- Edit files in `src/`
-- Run `npm run build` to compile
-- Test your changes
-
-### 4. Commit
-
-```bash
-git add .
-git commit -m "feat: add my feature"
-```
-
-Use conventional commits:
-- `feat:` - New feature
-- `fix:` - Bug fix
-- `docs:` - Documentation
-- `refactor:` - Code refactoring
-- `test:` - Adding tests
-
-### 5. Push & Create PR
-
-```bash
-git push origin feature/my-feature
-```
-
-Then open a Pull Request on GitHub.
-
-## Project Structure
+## Project structure
 
 ```
 src/
-├── index.ts              # Main exports
-├── types.ts              # TypeScript types
-├── profile-manager.ts    # Profile CRUD operations
-├── chrome-launcher.ts    # Chrome launch + anti-detect
-├── fingerprint.ts        # Fingerprint protection scripts
+├── index.ts              # Public API. Nothing is public unless it is exported here.
+├── types.ts              # Shared types and the Result helpers
+├── storage.ts            # Storage layout, atomic writes, browser lock files
+├── log.ts                # The only way to print diagnostics (stderr)
+├── profile-manager.ts    # Profile CRUD and launching
+├── chrome-launcher.ts    # Chrome launch, proxy relay, anti-detect injection
+├── fingerprint.ts        # WebRTC, Canvas, WebGL, Audio protection scripts
+├── cli.ts                # CLI generator over the registry. No business logic.
+├── mcp.ts                # MCP server generator over the registry. No business logic.
+├── commands/             # The command registry: one file per command
+│   ├── define.ts         # defineCommand, runCommand, resolveProfile, name mapping
+│   ├── registry.ts       # The array every generator reads
+│   ├── fields.ts         # Input fields shared by several commands
+│   └── <group>-<verb>.ts # profile-create.ts, browser-open.ts, ...
 └── integrations/
-    ├── puppeteer.ts      # Puppeteer integration
-    ├── playwright.ts     # Playwright integration
-    └── extower.ts        # ExTower API client
+    ├── puppeteer.ts
+    ├── playwright.ts
+    └── extower.ts
 ```
 
-## Key Files
+## Adding a command: one file plus one registry line
 
-| File | Description |
-|------|-------------|
-| `profile-manager.ts` | Profile create/read/update/delete |
-| `chrome-launcher.ts` | Launch Chrome with anti-detect flags |
-| `fingerprint.ts` | WebRTC, Canvas, WebGL protection scripts |
+A command is the single source for the CLI subcommand, the MCP tool and its validation. Write it
+once and it appears everywhere.
 
-## Testing
+1. Create `src/commands/<group>-<verb>.ts` and export a `defineCommand({...})`:
 
-Currently manual testing:
+   ```ts
+   export const profileArchive = defineCommand({
+       name: 'profile.archive',              // CLI: profile archive, MCP tool: profile_archive
+       description: 'One sentence, used verbatim by CLI help and the MCP tool description.',
+       cli: { positional: ['idOrName'], aliases: ['archive'] },
+       input: z.object({ idOrName: idOrNameField }),
+       async run(ctx, input) { /* returns Ok(...) or Err(...), never throws */ },
+       render(output) { /* human text for the CLI; --json and MCP use the raw output */ },
+   });
+   ```
 
-```typescript
-// test.ts
-import { quickLaunch } from './src/integrations/puppeteer';
+2. Add it to the `commands` array in `src/commands/registry.ts`.
+3. Add `src/commands/<group>-<verb>.test.ts`, or a case in `registry.test.ts`.
 
-const { page, close } = await quickLaunch({
-  proxy: { type: 'http', host: 'proxy.example.com', port: 8080 },
-});
+Rules the generators depend on, described in full in
+[`docs/adr/0001-command-registry.md`](./docs/adr/0001-command-registry.md):
 
-await page.goto('https://browserscan.net');
-// Check anti-detect score
-await close();
+- Every zod field carries a `.describe()`. It becomes CLI flag help and the MCP schema doc, and it
+  is read by an agent with no other context, so write it for one.
+- Commands return `Result`, never throw.
+- Never write to stdout. Diagnostics go through `ctx.log`, which writes to stderr. A single stray
+  `console.log` breaks the MCP stdio transport and `--json`.
+- Business logic belongs in the command file, never in `cli.ts` or `mcp.ts`.
+
+## Tests
+
+```bash
+npm test               # unit tests, no Chrome required
+npm run test:watch
 ```
+
+Tests that launch a real Chrome are opt-in, because they need a display and a Chrome install:
+
+```bash
+BROWSER_PROFILES_E2E=1 npm test
+```
+
+Point them at a scratch directory instead of your real profiles:
+
+```bash
+BROWSER_PROFILES_HOME=/tmp/bp-e2e BROWSER_PROFILES_E2E=1 npm test
+```
+
+Test behavior, not implementation. Every bug fix ships with the test that would have caught it.
 
 ## Debugging
 
-### Common Issues
+All logs go to stderr and are silent by default:
 
-#### Chrome not found
-```
-Error: Chrome not found
-```
-**Solution**: Install Chrome or set `chromePath` in options.
-
-#### Proxy connection failed
-```
-Error: Failed to configure proxy
-```
-**Solution**: Check proxy host/port/auth are correct.
-
-#### WebSocket connection failed
-```
-Error: Failed to connect to browser
-```
-**Solution**: Ensure Chrome launched successfully, check port.
-
-### Debug Mode
-
-Enable debug logging:
-
-```typescript
-const profiles = new BrowserProfiles({
-  debug: true, // Coming soon
-});
+```bash
+DEBUG=browser-profiles* browser-profiles browser status
+browser-profiles browser open my-profile --verbose
 ```
 
-## Code Style
+Every common failure, with its exact message and the fix, is in
+[`docs/troubleshooting.md`](./docs/troubleshooting.md).
 
-- TypeScript strict mode
-- ES modules
-- JSDoc comments for public APIs
-- Consistent naming (camelCase)
+## Code style
 
-## Questions?
+- TypeScript strict, no `any`. Prefer discriminated unions so illegal states cannot be expressed.
+- 4-space indent, single quotes, ES modules.
+- Comments explain *why*, in English, at most two lines. No dates, names or history.
+- Function under 30 lines, file under 300 lines.
 
-- Open an issue on GitHub
-- Check existing issues first
+## Pull requests
+
+- Branch from `main`: `feat/...`, `fix/...`, `chore/...`.
+- Conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`.
+- Under 400 lines of diff, one idea per PR.
+- Docs change with the code, in the same PR: `README.md`, `docs/`, `llms.txt`, `CHANGELOG.md`.
+- CI must be green before merge.
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the MIT License.
+By contributing, you agree that your contributions are licensed under the MIT License.

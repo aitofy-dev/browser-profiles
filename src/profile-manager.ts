@@ -14,13 +14,10 @@ import type {
     LaunchResult,
 } from './types';
 import { launchChrome, closeBrowser } from './chrome-launcher';
-import os from 'os';
+import { resolveStoragePath, writeJsonAtomic } from './storage';
+import { createLogger } from './log';
 
-/**
- * Default storage path for profiles
- * Uses ~/.aitofy/browser-profiles to avoid bloating project directories
- */
-const DEFAULT_STORAGE_PATH = path.join(os.homedir(), '.aitofy', 'browser-profiles');
+const log = createLogger('profile-manager');
 
 /**
  * Generate a unique profile ID
@@ -29,18 +26,30 @@ function generateId(): string {
     return crypto.randomBytes(8).toString('hex');
 }
 
+/** `tmp-` ids address the temporary-session store, so a profile must never take one. */
+export const TEMP_ID_PREFIX = 'tmp-';
+
 /**
- * Validate custom profile ID
- * - Must be alphanumeric with optional hyphens and underscores
- * - Length between 1 and 64 characters
+ * Why a custom profile ID is unusable, or null when it is fine.
+ * Ids become directory names and route the browser lifecycle, so they are strict.
  */
-function validateProfileId(id: string): boolean {
+function validateProfileId(id: string): string | null {
     if (!id || id.length === 0 || id.length > 64) {
-        return false;
+        return `Invalid profile ID: "${id}". ID must be 1-64 characters long.`;
     }
-    // Allow alphanumeric, hyphen, underscore, period
-    const validPattern = /^[a-zA-Z0-9_-]+$/;
-    return validPattern.test(id);
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) {
+        return `Invalid profile ID: "${id}". Use letters, digits, hyphen and underscore only.`;
+    }
+    if (id.toLowerCase().startsWith(TEMP_ID_PREFIX)) {
+        return `Invalid profile ID: "${id}". Ids starting with "${TEMP_ID_PREFIX}" are reserved for ` +
+            'temporary browser.launch sessions and could not be closed or deleted. Pick another id.';
+    }
+    return null;
+}
+
+/** An id or name that would escape the storage directory once joined into a path. */
+function isUnsafePathSegment(value: string): boolean {
+    return value.includes('/') || value.includes('\\') || value === '.' || value.includes('..');
 }
 
 /**
@@ -77,7 +86,7 @@ export class BrowserProfiles {
 
     constructor(options: BrowserProfilesOptions = {}) {
         this.options = options;
-        this.storagePath = options.storagePath || DEFAULT_STORAGE_PATH;
+        this.storagePath = resolveStoragePath(options.storagePath);
         this.profilesPath = path.join(this.storagePath, 'profiles');
         this.groupsPath = path.join(this.storagePath, 'groups');
 
@@ -136,13 +145,8 @@ export class BrowserProfiles {
         let id: string;
 
         if (config.id) {
-            // Validate custom ID
-            if (!validateProfileId(config.id)) {
-                throw new Error(
-                    `Invalid profile ID: "${config.id}". ` +
-                    'ID must be 1-64 characters, alphanumeric with hyphens and underscores only.'
-                );
-            }
+            const invalid = validateProfileId(config.id);
+            if (invalid) throw new Error(invalid);
             // Check if ID already exists
             const existing = await this.get(config.id);
             if (existing) {
@@ -182,8 +186,7 @@ export class BrowserProfiles {
         }
 
         // Save config
-        const configPath = this.getProfileConfigPath(id);
-        fs.writeFileSync(configPath, JSON.stringify(profile, null, 2));
+        writeJsonAtomic(this.getProfileConfigPath(id), profile);
 
         return profile;
     }
@@ -192,6 +195,9 @@ export class BrowserProfiles {
      * Get a profile by ID
      */
     async get(profileId: string): Promise<StoredProfile | null> {
+        // The id reaches path.join below: never let it walk out of the store.
+        if (isUnsafePathSegment(profileId)) return null;
+
         const configPath = this.getProfileConfigPath(profileId);
 
         if (!fs.existsSync(configPath)) {
@@ -311,8 +317,7 @@ export class BrowserProfiles {
             updatedAt: Date.now(),
         };
 
-        const configPath = this.getProfileConfigPath(profileId);
-        fs.writeFileSync(configPath, JSON.stringify(updated, null, 2));
+        writeJsonAtomic(this.getProfileConfigPath(profileId), updated);
 
         return updated;
     }
@@ -363,15 +368,17 @@ export class BrowserProfiles {
             defaultViewport: options?.defaultViewport,
             slowMo: options?.slowMo,
             timeout: options?.timeout,
+            detached: options?.detached,
         });
+
+        log.debug(`Launched profile ${profileId} on port ${result.port}`);
 
         // Update last launched time
         await this.update(profileId, {});
         const updated = await this.get(profileId);
         if (updated) {
             updated.lastLaunchedAt = Date.now();
-            const configPath = this.getProfileConfigPath(profileId);
-            fs.writeFileSync(configPath, JSON.stringify(updated, null, 2));
+            writeJsonAtomic(this.getProfileConfigPath(profileId), updated);
         }
 
         // Track running browser
@@ -457,8 +464,7 @@ export class BrowserProfiles {
             profileCount: 0,
         };
 
-        const groupPath = path.join(this.groupsPath, `${id}.json`);
-        fs.writeFileSync(groupPath, JSON.stringify(group, null, 2));
+        writeJsonAtomic(path.join(this.groupsPath, `${id}.json`), group);
 
         return group;
     }

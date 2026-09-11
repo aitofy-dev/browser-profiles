@@ -124,6 +124,29 @@ export type {
 export { Ok, Err } from './types';
 
 // ============================================================================
+// Command registry (one definition drives the library, the CLI and MCP)
+// ============================================================================
+
+export {
+    commands,
+    getCommand,
+    runCommand,
+    createCommandContext,
+    resolveStoragePath,
+} from './commands/registry';
+
+export type {
+    AnyCommandDef,
+    CommandContext,
+    CommandDef,
+} from './commands/registry';
+
+export { parseProxyUrl, formatProxyUrl } from './commands/proxy-url';
+
+export { createLogger } from './log';
+export type { Logger } from './log';
+
+// ============================================================================
 // Puppeteer Integration (re-exported for convenience)
 // ============================================================================
 // Users can now use:

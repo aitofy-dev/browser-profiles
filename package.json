@@ -27,19 +27,32 @@
         "webrtc-leak",
         "canvas-fingerprint",
         "browser-fingerprint",
-        "rebrowser"
+        "rebrowser",
+        "mcp",
+        "mcp-server",
+        "model-context-protocol",
+        "ai-agent",
+        "claude",
+        "cursor",
+        "playwright-mcp"
     ],
     "main": "./dist/index.js",
     "module": "./dist/index.mjs",
     "types": "./dist/index.d.ts",
     "bin": {
-        "browser-profiles": "./dist/cli.js"
+        "browser-profiles": "./dist/cli.js",
+        "browser-profiles-mcp": "./dist/mcp-bin.js"
     },
     "exports": {
         ".": {
             "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
+        },
+        "./mcp": {
+            "types": "./dist/mcp.d.ts",
+            "import": "./dist/mcp.mjs",
+            "require": "./dist/mcp.js"
         },
         "./puppeteer": {
             "types": "./dist/puppeteer.d.ts",
@@ -93,11 +106,13 @@
         }
     },
     "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.30.0",
         "chrome-launcher": "^1.1.2",
         "chrome-remote-interface": "^0.33.2",
         "commander": "^12.1.0",
         "proxy-chain": "^2.5.5",
-        "rebrowser-puppeteer-core": ">=22.0.0"
+        "rebrowser-puppeteer-core": ">=22.0.0",
+        "zod": "^4.6.2"
     },
     "devDependencies": {
         "@types/chrome-remote-interface": "^0.33.0",

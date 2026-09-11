@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest a capability the package does not have
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that is hard or impossible today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you want
+      description: >
+        The API, CLI command or MCP tool as you would like to use it. Code beats prose.
+      render: typescript
+    validations:
+      required: true
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where it belongs
+      options:
+        - Library API
+        - CLI
+        - MCP server
+        - All three (a new command in the registry)
+        - Not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you tried instead
+      description: Workarounds you are using now, and why they are not enough.

@@ -45,7 +45,8 @@ export type BrowserErrorCode =
     | 'CDP_ERROR'            // Chrome DevTools Protocol error
     | 'INVALID_CONFIG'       // Invalid configuration
     | 'STORAGE_ERROR'        // File system error
-    | 'GEO_LOOKUP_FAILED';   // IP geolocation failed
+    | 'GEO_LOOKUP_FAILED'    // IP geolocation failed
+    | 'INTERNAL';            // Unexpected failure, not caused by user input
 
 /**
  * Structured error for browser operations
@@ -205,6 +206,8 @@ export interface LaunchOptions {
     slowMo?: number;
     /** Timeout for browser launch in ms */
     timeout?: number;
+    /** Let Chrome outlive this Node process (no SIGINT handler, child unref'd) */
+    detached?: boolean;
 }
 
 /**
@@ -235,6 +238,10 @@ export interface LaunchResult {
     profileId: string;
     /** Close function to cleanup */
     close: () => Promise<void>;
+    /** True when an already-running browser was reused instead of launched */
+    reused?: boolean;
+    /** True when Chrome outlives this process, so only the first tab is protected */
+    detached?: boolean;
 }
 
 /**

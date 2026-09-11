@@ -4,6 +4,8 @@ export default defineConfig({
     entry: {
         index: 'src/index.ts',
         cli: 'src/cli.ts',
+        mcp: 'src/mcp.ts',
+        'mcp-bin': 'src/mcp-bin.ts',
         puppeteer: 'src/integrations/puppeteer.ts',
         playwright: 'src/integrations/playwright.ts',
         'extower': 'src/integrations/extower.ts',

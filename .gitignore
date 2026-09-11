@@ -22,4 +22,6 @@ Thumbs.db
 
 # Package
 *.tgz
-docs/
+
+# Claude Code worktrees
+.claude/
