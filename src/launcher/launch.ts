@@ -2,13 +2,14 @@
 // @aitofy/browser-profiles - Launch Chrome for a profile
 // ============================================================================
 
-import type { LaunchOptions, LaunchResult, ResolvedEngine, StoredProfile } from '../types';
+import { spoofSettings } from '../types';
+import type { LaunchOptions, LaunchResult, SpoofEngine, StoredProfile } from '../types';
 import { createLogger } from '../log';
 import { deleteLockFile, lockFilePath, probeDevToolsPort, writeLockFile } from '../storage';
 import { startAutoAttach } from './auto-attach';
 import { buildChromeFlags, clearStaleSingletonLocks } from './chrome-flags';
 import { getChromePath } from './chrome-path';
-import { binaryLooksLikeKernel, buildKernelFlags, resolveEngine } from './kernel';
+import { binaryLooksLikeKernel, buildKernelFlags } from './kernel';
 import { claimProfile } from './claim';
 import { loadCdp, loadChromeLauncher } from './deps';
 import type { CdpClient, CdpConnectOptions, LaunchedChrome } from './deps';
@@ -17,10 +18,10 @@ import type { ProtectionPlan } from './protections';
 import {
     assertDetachedLaunchAllowed,
     closeProxyRelay,
-    detectExitLocation,
-    detectTimezoneFromIP,
+    resolveTimezone,
     startProxyRelay,
 } from './proxy';
+import { resolveProfileEngine, startRealSession } from './real';
 import { reuseExisting } from './reuse';
 import { trackBrowser, untrackBrowser } from './running';
 import { parseChromeVersion, FALLBACK_CHROME_MAJOR, FALLBACK_CHROME_VERSION } from '../user-agent';
@@ -42,23 +43,10 @@ export interface ChromeLaunchOptions extends LaunchOptions {
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Timezone for Chrome's TZ, from the profile, else the proxy exit IP, else this host. */
-async function resolveTimezone(profile: StoredProfile, relayUrl: string | undefined): Promise<string> {
-    if (profile.timezone) return profile.timezone;
-
-    if (profile.proxy) {
-        const exit = relayUrl ? await detectExitLocation(relayUrl) : null;
-        const geo = exit ?? await detectTimezoneFromIP(profile.proxy.host);
-        if (geo) {
-            log.info(`Auto-detected timezone: ${geo.timezone} (${geo.city}, ${geo.country})`);
-            return geo.timezone;
-        }
-    }
-
-    const systemTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    log.debug(`Using system timezone: ${systemTimezone}`);
-    return systemTimezone;
-}
+/** A real profile keeps Chrome's clock unless it names a timezone; a spoof always sets one. */
+type LaunchIdentity =
+    | { engine: 'real'; timezone?: string }
+    | { engine: SpoofEngine; timezone: string };
 
 async function browserEndpoint(port: number): Promise<string | null> {
     for (let attempt = 0; attempt < ENDPOINT_ATTEMPTS; attempt++) {
@@ -165,15 +153,17 @@ async function launchClaimed(options: ChromeLaunchOptions, userDataDir: string):
     }
 
     const executablePath = getChromePath(chromePath);
-    const engine = resolveEngine(options.engine ?? 'auto', binaryLooksLikeKernel(executablePath));
-    if (engine === 'kernel' && profile.fingerprint?.userAgent) {
+    const engine = resolveProfileEngine(profile, options.engine, () => binaryLooksLikeKernel(executablePath));
+    if (engine === 'kernel' && spoofSettings(profile.fingerprint)?.userAgent) {
         log.warn(
             'fingerprint.userAgent is ignored in kernel mode. The binary sets the user agent from its ' +
             'own version; a pinned string would disagree with it.'
         );
     }
     const relayUrl = profile.proxy ? await startProxyRelay(profile.proxy) : undefined;
-    const timezone = await resolveTimezone(profile, relayUrl);
+    const identity: LaunchIdentity = engine === 'real'
+        ? { engine, timezone: profile.timezone }
+        : { engine, timezone: await resolveTimezone(profile, relayUrl) };
 
     log.debug(`Launching Chrome: ${executablePath}`);
     log.debug(`User data dir: ${userDataDir}`);
@@ -192,14 +182,16 @@ async function launchClaimed(options: ChromeLaunchOptions, userDataDir: string):
                 args: flagArgs,
                 extensions,
                 proxyServer: relayUrl,
-                kernelFlags: engine === 'kernel' ? buildKernelFlags(profile, timezone) : undefined,
+                real: identity.engine === 'real',
+                kernelFlags: identity.engine === 'kernel' ? buildKernelFlags(profile, identity.timezone) : undefined,
             }),
             ...(startingUrl ? { startingUrl } : {}),
             userDataDir,
             ignoreDefaultFlags: true,
             // Our own SIGINT handlers must run: chrome-launcher's kills and exits first.
             handleSIGINT: false,
-            envVars: { TZ: timezone },
+            // Without envVars chrome-launcher passes this process's environment through.
+            envVars: identity.timezone ? { TZ: identity.timezone } : undefined,
         });
         if (detached) {
             // chrome-launcher already spawns with detached:true on POSIX; unref frees our event loop.
@@ -219,11 +211,22 @@ async function launchClaimed(options: ChromeLaunchOptions, userDataDir: string):
     }
 
     let releaseSession: (() => Promise<void>) | undefined;
+    // The browser died on its own: drop the state that claims it is alive.
+    const forget = (): void => {
+        untrackBrowser(profile.id);
+        deleteLockFile(userDataDir);
+        void closeProxyRelay(relayUrl);
+    };
 
     try {
-        releaseSession = detached
-            ? await protectFirstTabOnly(chrome.port, profile, timezone, engine)
-            : await protectEveryTab(wsEndpoint, profile, timezone, engine, userDataDir, relayUrl);
+        if (identity.engine === 'real') {
+            const connect = () => connectCdp({ target: wsEndpoint });
+            releaseSession = await startRealSession({ connect, profile, detached, onDisconnect: forget });
+        } else {
+            releaseSession = detached
+                ? await protectFirstTabOnly(chrome.port, profile, identity.timezone, identity.engine)
+                : await protectEveryTab(wsEndpoint, profile, identity.timezone, identity.engine, forget);
+        }
     } catch (error) {
         await abortLaunch(chrome, relayUrl);
         throw error;
@@ -281,7 +284,7 @@ async function planFor(
     client: CdpClient,
     profile: StoredProfile,
     timezone: string,
-    engine: ResolvedEngine
+    engine: SpoofEngine
 ): Promise<ProtectionPlan> {
     if (engine === 'kernel') return buildProtectionPlan(profile, timezone, FALLBACK_CHROME_VERSION, 'kernel');
 
@@ -304,7 +307,7 @@ async function protectFirstTabOnly(
     port: number,
     profile: StoredProfile,
     timezone: string,
-    engine: ResolvedEngine
+    engine: SpoofEngine
 ): Promise<undefined> {
     const client = await connectCdp({ port });
     try {
@@ -323,9 +326,8 @@ async function protectEveryTab(
     wsEndpoint: string,
     profile: StoredProfile,
     timezone: string,
-    engine: ResolvedEngine,
-    userDataDir: string,
-    relayUrl: string | undefined
+    engine: SpoofEngine,
+    onDisconnect: () => void
 ): Promise<() => Promise<void>> {
     const client = await connectCdp({ target: wsEndpoint });
     const plan = await planFor(client, profile, timezone, engine);
@@ -335,12 +337,7 @@ async function protectEveryTab(
         client,
         plan,
         log,
-        onDisconnect: () => {
-            // The browser died on its own: drop the state that claims it is alive.
-            untrackBrowser(profile.id);
-            deleteLockFile(userDataDir);
-            void closeProxyRelay(relayUrl);
-        },
+        onDisconnect,
     });
 
     return async () => {

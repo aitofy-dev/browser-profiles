@@ -2,7 +2,8 @@
 // @aitofy/browser-profiles - Anti-detect injections, applied per CDP session
 // ============================================================================
 
-import type { ProfileCookie, ResolvedEngine, StoredProfile } from '../types';
+import { spoofSettings } from '../types';
+import type { ProfileCookie, SpoofEngine, StoredProfile } from '../types';
 import { FINGERPRINT_DEFAULTS, getProfileProtectionScripts, getProfileWorkerScript } from '../fingerprint';
 import { buildUserAgentMetadata, resolveUserAgent, FALLBACK_CHROME_VERSION } from '../user-agent';
 import type { ChromeVersion } from '../user-agent';
@@ -35,10 +36,10 @@ export interface ProtectionPlan {
     /** Set when the profile pins a UA claiming another Chrome major than the browser running it. */
     userAgentMismatch: { claimed: number; running: number } | null;
     /** kernel: the binary owns the fingerprint; only the locale override is sent. */
-    engine: ResolvedEngine;
+    engine: SpoofEngine;
 }
 
-function cookieParams(cookie: ProfileCookie): CdpParams {
+export function cookieParams(cookie: ProfileCookie): CdpParams {
     return {
         url: `https://${cookie.domain}`,
         name: cookie.name,
@@ -65,12 +66,13 @@ export function buildProtectionPlan(
     profile: StoredProfile,
     timezoneId: string = profile.timezone || FALLBACK_TIMEZONE,
     chromeVersion: ChromeVersion = FALLBACK_CHROME_VERSION,
-    engine: ResolvedEngine = 'inject'
+    engine: SpoofEngine = 'inject'
 ): ProtectionPlan {
-    const platform = profile.fingerprint?.platform || FINGERPRINT_DEFAULTS.platform;
-    const language = profile.fingerprint?.language || FINGERPRINT_DEFAULTS.language;
+    const fingerprint = spoofSettings(profile.fingerprint);
+    const platform = fingerprint?.platform || FINGERPRINT_DEFAULTS.platform;
+    const language = fingerprint?.language || FINGERPRINT_DEFAULTS.language;
     const { userAgent, version, mismatch } = resolveUserAgent(
-        profile.fingerprint?.userAgent,
+        fingerprint?.userAgent,
         platform,
         chromeVersion
     );
@@ -82,8 +84,8 @@ export function buildProtectionPlan(
             acceptLanguage: acceptLanguageHeader(language),
             userAgentMetadata: buildUserAgentMetadata(platform, version),
         },
-        initScript: engine === 'kernel' ? '' : getProfileProtectionScripts(profile.fingerprint),
-        workerScript: engine === 'kernel' ? '' : getProfileWorkerScript(profile.fingerprint, userAgent),
+        initScript: engine === 'kernel' ? '' : getProfileProtectionScripts(fingerprint),
+        workerScript: engine === 'kernel' ? '' : getProfileWorkerScript(fingerprint, userAgent),
         timezoneId,
         locale: language,
         cookies: (profile.cookies ?? []).map(cookieParams),
@@ -130,7 +132,7 @@ export async function applyWorkerProtections(session: CdpSession, plan: Protecti
  * Cookies belong to the browser's cookie store, not to one tab, so they are
  * installed once per launch and every later tab inherits them.
  */
-export async function applyCookies(session: CdpSession, plan: ProtectionPlan): Promise<void> {
+export async function applyCookies(session: CdpSession, plan: Pick<ProtectionPlan, 'cookies'>): Promise<void> {
     if (plan.cookies.length === 0) return;
     // A cookie the browser rejects must not cost the rest of the launch.
     await session.send('Storage.setCookies', { cookies: plan.cookies }).catch(() => undefined);

@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { Err, Ok } from '../types';
-import type { BrowserError, Result } from '../types';
+import type { BrowserError, ResolvedEngine, Result } from '../types';
 import { DETACHED_PROXY_MESSAGE } from '../launcher/proxy';
+import { REAL_ENGINE_ADVICE } from '../launcher/real';
 import { defineCommand, resolveProfile } from './define';
 import { detachedField, engineField, headlessField, idOrNameField } from './fields';
 
@@ -14,13 +15,13 @@ export interface BrowserOpened {
     reused: boolean;
     /** True when Chrome was started to outlive the opener (reduced protection). */
     detached: boolean;
-    /** kernel spoofs inside Chromium. inject patches from JavaScript. */
-    engine: 'kernel' | 'inject';
+    /** kernel spoofs inside Chromium. inject patches from JavaScript. real changes nothing. */
+    engine: ResolvedEngine;
 }
 
 /** The launcher reports every problem as a thrown Error; keep the codes honest. */
 export function launchErrorCode(message: string): BrowserError['code'] {
-    if (message.includes(DETACHED_PROXY_MESSAGE)) return 'INVALID_CONFIG';
+    if (message.includes(DETACHED_PROXY_MESSAGE) || message.includes(REAL_ENGINE_ADVICE)) return 'INVALID_CONFIG';
     if (/not found/i.test(message) && /chrom/i.test(message)) return 'CHROME_NOT_FOUND';
     return 'LAUNCH_FAILED';
 }
@@ -35,7 +36,8 @@ export const browserOpen = defineCommand({
     name: 'browser.open',
     description:
         'Open Chrome with a stored profile and return its CDP wsEndpoint. Calling it again for the same ' +
-        'profile returns the running browser with reused=true. Close it with browser.close.',
+        'profile returns the running browser with reused=true. engine reports real when the profile ' +
+        'ran with Chrome\'s own fingerprint. Close it with browser.close.',
     cli: { positional: ['idOrName'], aliases: ['open'], keepAlive: true },
     input: z.object({
         idOrName: idOrNameField,

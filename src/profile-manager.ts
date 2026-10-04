@@ -16,20 +16,9 @@ import type {
 import { launchChrome, closeBrowser } from './chrome-launcher';
 import { resolveStoragePath, writeJsonAtomic } from './storage';
 import { createLogger } from './log';
-import { pickWebGLForPlatform } from './fingerprint';
+import { initialIdentity, modeSwitch } from './profile-fingerprint';
 
 const log = createLogger('profile-manager');
-
-type FingerprintConfig = NonNullable<ProfileConfig['fingerprint']>;
-
-/**
- * Persist a platform-consistent WebGL vendor/renderer so every launch of the
- * profile reports the same GPU
- */
-function withDefaultWebGL(fingerprint: FingerprintConfig): FingerprintConfig {
-    if (fingerprint.webgl?.renderer) return fingerprint;
-    return { ...fingerprint, webgl: { ...pickWebGLForPlatform(fingerprint.platform), ...fingerprint.webgl } };
-}
 
 /**
  * Generate a unique profile ID
@@ -175,10 +164,9 @@ export class BrowserProfiles {
             ...config,
             id,
             name: config.name || `Profile ${id.slice(0, 6)}`,
-            timezone: config.timezone || this.options.defaultTimezone || 'America/New_York',
+            ...initialIdentity(config, this.options.defaultTimezone),
             proxy: config.proxy || this.options.defaultProxy || null,
             cookies: config.cookies || [],
-            fingerprint: withDefaultWebGL(config.fingerprint || {}),
             startUrls: config.startUrls || [],
             tags: config.tags || [],
             createdAt: now,
@@ -324,6 +312,7 @@ export class BrowserProfiles {
         const updated: StoredProfile = {
             ...existing,
             ...updates,
+            ...modeSwitch(existing, updates),
             id: existing.id, // Prevent ID change
             createdAt: existing.createdAt, // Preserve creation time
             updatedAt: Date.now(),

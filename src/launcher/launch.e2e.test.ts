@@ -179,6 +179,29 @@ e2e('a browser launched for a profile', () => {
         }
     }, 60_000);
 
+    it('leaves a real profile with Chrome\'s own user agent and this host\'s clock', async () => {
+        userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-profiles-e2e-'));
+        const real: StoredProfile = {
+            id: 'e2e-real', name: 'Real', createdAt: 0, updatedAt: 0, fingerprint: { mode: 'real' },
+        };
+        launched = await launchChrome({ profile: real, userDataDir, headless: true });
+        expect(launched.engine).toBe('real');
+
+        const browser = await puppeteer.connect({ browserWSEndpoint: launched.wsEndpoint });
+        try {
+            const page = await browser.newPage();
+            await page.goto('data:text/html,<title>e2e</title>');
+            const seen = await page.evaluate(() => ({
+                userAgent: navigator.userAgent,
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            }));
+            expect(seen.userAgent).toBe(await browser.userAgent());
+            expect(seen.timezone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
+        } finally {
+            browser.disconnect();
+        }
+    }, 60_000);
+
     // Needs a fingerprint-chromium build: KERNEL_PATH=/path/to/Chromium.
     it.skipIf(!process.env.KERNEL_PATH)('gives Intl the profile locale in kernel mode', async () => {
         userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'browser-profiles-e2e-'));

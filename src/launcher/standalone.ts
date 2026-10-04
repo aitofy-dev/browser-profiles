@@ -5,7 +5,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import type { ProxyConfig, StoredProfile } from '../types';
+import type { ProxyConfig, ResolvedEngine, StoredProfile } from '../types';
 import { createLogger } from '../log';
 import { launchChrome } from './launch';
 
@@ -100,7 +100,7 @@ export interface StandaloneLaunchResult {
     close: () => Promise<void>;
 
     /** kernel spoofs inside Chromium. inject patches from JavaScript. */
-    engine: 'kernel' | 'inject';
+    engine: ResolvedEngine;
 }
 
 /**

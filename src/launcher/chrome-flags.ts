@@ -17,6 +17,8 @@ export interface ChromeFlagOptions {
     proxyServer?: string;
     /** fingerprint-chromium switches. Empty on the inject engine. */
     kernelFlags?: string[];
+    /** Real profile: no anti-detect flags, and --lang only when the profile pins a language. */
+    real?: boolean;
 }
 
 const BASE_FLAGS = [
@@ -36,16 +38,22 @@ const BASE_FLAGS = [
     '--disable-dev-shm-usage',
 ];
 
+// Drops the automation-controlled bit navigator.webdriver reads.
+const NOT_WEBDRIVER_FLAG = '--disable-blink-features=AutomationControlled';
+
+// WebRTC must not reach the network outside the proxy.
+const WEBRTC_PROXY_FLAGS = [
+    '--webrtc-ip-handling-policy=disable_non_proxied_udp',
+    '--force-webrtc-ip-handling-policy',
+];
+
 const ANTI_DETECT_FLAGS = [
-    // Drops the automation-controlled bit navigator.webdriver reads.
-    '--disable-blink-features=AutomationControlled',
+    NOT_WEBDRIVER_FLAG,
     '--disable-infobars',
     '--disable-extensions-file-access-check',
     '--enable-features=NetworkService,NetworkServiceInProcess',
     '--disable-features=IsolateOrigins,site-per-process',
-    // WebRTC must not reach the network outside the proxy.
-    '--webrtc-ip-handling-policy=disable_non_proxied_udp',
-    '--force-webrtc-ip-handling-policy',
+    ...WEBRTC_PROXY_FLAGS,
 ];
 
 const HEADLESS_FLAGS = ['--headless=new', '--mute-audio', '--hide-scrollbars'];
@@ -59,14 +67,24 @@ function extensionFlags(extensions: string[]): string[] {
     return [`--disable-extensions-except=${joined}`, `--load-extension=${joined}`];
 }
 
+/** A hand-opened Chrome is not webdriver, so that bit stays off; the proxy must not leak either. */
+function realIdentityFlags(language: string | undefined, proxyServer: string | undefined): string[] {
+    return [
+        ...(language ? [`--lang=${language}`] : []),
+        NOT_WEBDRIVER_FLAG,
+        ...(proxyServer ? WEBRTC_PROXY_FLAGS : []),
+    ];
+}
+
 export function buildChromeFlags(options: ChromeFlagOptions): string[] {
     const { profile, userDataDir, headless, args, extensions, proxyServer, kernelFlags = [] } = options;
+    const language = profile.fingerprint?.language;
 
     return [
         ...BASE_FLAGS,
-        `--lang=${profile.fingerprint?.language || 'en-US'}`,
-        ...ANTI_DETECT_FLAGS,
-        ...kernelFlags,
+        ...(options.real
+            ? realIdentityFlags(language, proxyServer)
+            : [`--lang=${language || 'en-US'}`, ...ANTI_DETECT_FLAGS, ...kernelFlags]),
         ...(userDataDir ? [`--user-data-dir=${userDataDir}`] : []),
         ...(headless ? HEADLESS_FLAGS : []),
         ...(proxyServer ? [`--proxy-server=${proxyServer}`] : []),

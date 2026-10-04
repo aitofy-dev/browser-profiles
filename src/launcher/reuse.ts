@@ -40,6 +40,10 @@ export async function reuseExisting(
     }
 
     log.info(`Reusing browser for profile "${profile.name}" (pid ${lock.pid}, port ${lock.port})`);
+    const engine = lock.engine ?? 'inject';
+    if ((engine === 'real') !== (profile.fingerprint?.mode === 'real')) {
+        log.warn(`Profile "${profile.name}" changed mode since its browser opened (${engine}). Close and reopen it.`);
+    }
 
     const close = async (): Promise<void> => {
         try {
@@ -60,6 +64,6 @@ export async function reuseExisting(
         close,
         reused: true,
         detached: lock.detached,
-        engine: lock.engine === 'kernel' ? 'kernel' : 'inject',
+        engine,
     };
 }

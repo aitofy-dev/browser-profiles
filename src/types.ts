@@ -126,6 +126,8 @@ export interface WebGLConfig {
  * Fingerprint configuration for anti-detect
  */
 export interface FingerprintConfig {
+    /** Absent or "generated": the profile gets a spoofed fingerprint built from these settings. */
+    mode?: 'generated';
     /** User agent string */
     userAgent?: string;
     /** Accept-Language header */
@@ -149,14 +151,35 @@ export interface FingerprintConfig {
 }
 
 /**
+ * Chrome's own identity: nothing is generated, overridden or injected, so a hand-made
+ * login keeps looking like the same device. Only an explicit language becomes --lang.
+ */
+export interface RealFingerprint {
+    mode: 'real';
+    /** BCP 47 tag passed to Chrome as --lang. Unset keeps Chrome's own language. */
+    language?: string;
+}
+
+/** What a stored profile says about its fingerprint. Stored JSON without `mode` is generated. */
+export type ProfileFingerprint = FingerprintConfig | RealFingerprint;
+
+/** The settings a spoofing engine reads. A real profile has none. */
+export function spoofSettings(fingerprint: ProfileFingerprint | undefined): FingerprintConfig | undefined {
+    return fingerprint?.mode === 'real' ? undefined : fingerprint;
+}
+
+/**
  * auto: kernel when the executable is fingerprint-chromium, otherwise JavaScript injection.
  * kernel: engine-level spoof. Refuses to launch on stock Chrome.
  * inject: JavaScript and CDP overrides, even if the binary is a kernel build.
  */
 export type FingerprintEngine = 'auto' | 'kernel' | 'inject';
 
-/** The engine a running browser actually launched with. */
-export type ResolvedEngine = 'kernel' | 'inject';
+/** The engines that spoof a fingerprint. */
+export type SpoofEngine = 'kernel' | 'inject';
+
+/** What a running browser actually launched with. real: no engine, Chrome's own identity. */
+export type ResolvedEngine = SpoofEngine | 'real';
 
 /**
  * Browser profile configuration
@@ -172,8 +195,8 @@ export interface ProfileConfig {
     timezone?: string;
     /** Cookies to inject */
     cookies?: ProfileCookie[];
-    /** Fingerprint configuration */
-    fingerprint?: FingerprintConfig;
+    /** Spoofed fingerprint settings (default), or `{ mode: 'real' }` for Chrome's own identity */
+    fingerprint?: ProfileFingerprint;
     /** URLs to open on launch */
     startUrls?: string[];
     /** Additional notes/metadata */
@@ -221,6 +244,7 @@ export interface LaunchOptions {
     /**
      * Where the fingerprint is applied.
      * Default `auto`: kernel when the executable has the fingerprint-chromium switch.
+     * A real profile only accepts `auto`; it then launches with no engine.
      */
     engine?: FingerprintEngine;
 }
@@ -257,7 +281,7 @@ export interface LaunchResult {
     reused?: boolean;
     /** True when Chrome outlives this process, so only the first tab is protected */
     detached?: boolean;
-    /** kernel spoofs inside Chromium. inject patches from JavaScript. */
+    /** kernel spoofs inside Chromium. inject patches from JavaScript. real changes nothing. */
     engine: ResolvedEngine;
 }
 

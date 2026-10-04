@@ -120,6 +120,7 @@ export type {
     LaunchResult,
     FingerprintEngine,
     ResolvedEngine,
+    SpoofEngine,
 
     // Proxy & Cookie types
     ProxyConfig,
@@ -127,6 +128,8 @@ export type {
 
     // Fingerprint types
     FingerprintConfig,
+    ProfileFingerprint,
+    RealFingerprint,
     FingerprintGenerateOptions,
     ScreenConfig,
     WebGLConfig,
