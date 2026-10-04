@@ -28,3 +28,7 @@ Thumbs.db
 
 # Benchmark captures (screenshots can show the host locale)
 measurements/
+
+# Competitor research stays local, out of the public repo
+docs/reverse-engineering.md
+scripts/research/
