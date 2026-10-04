@@ -73,8 +73,8 @@ credentials are never logged.
 `config.json` is written atomically (temp file plus rename), so a reader never sees half a file.
 
 `.browser-lock.json` is the cross-process record of a running Chrome: `pid`, `port`, `wsEndpoint`,
-`startedAt`, and optionally the local relay `proxyUrl`, `detached`, and `claiming` while a launch is
-in flight. It is what lets `browser close` and `browser status` work from a different process, and
+`startedAt`, and optionally the `engine` it launched with (`kernel`, `inject` or `real`), the local
+relay `proxyUrl`, `detached`, and `claiming` while a launch is in flight. It is what lets `browser close` and `browser status` work from a different process, and
 what gets cleaned up when a browser crashed. See [browser-lifecycle.md](./browser-lifecycle.md).
 
 ## See also

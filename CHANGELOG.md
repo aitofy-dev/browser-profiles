@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Real fingerprint mode for persistent profiles.** `fingerprint: { mode: 'real' }` in the library,
+  `--fingerprint real` in the CLI, `fingerprint: "real"` in MCP, on create and update. A real
+  profile launches with Chrome's own identity: no generated fingerprint, no user agent or Client
+  Hints override, no injected script, no auto-attach, no kernel or anti-detect flags, and no
+  timezone or locale unless the profile sets one. Meant for accounts signed in by hand, where a
+  spoofed fingerprint triggers new-device checks. It refuses `engine: "kernel"` and `"inject"` with
+  `INVALID_CONFIG`, and rejects `platform`. Existing profiles are unchanged.
+- `browser status` reports each browser's `engine`, and `engine` can now be `real` in launch results
+  and lock files. `profile list` shows a Fingerprint column.
+
+### Changed
+
+- `ResolvedEngine` gains `'real'`. Code that switches on `LaunchResult.engine` should handle it.
+- A real profile gets no default timezone at create time, and switching a profile to real drops its
+  stored timezone unless the same update sets one. Generated profiles still default to
+  `America/New_York` (or `defaultTimezone`).
+
 ## [0.4.0] - 2026-10-04
 
 ### Added

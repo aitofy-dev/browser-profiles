@@ -57,6 +57,15 @@ const { wsEndpoint, close } = await profiles.launch(profile.id);
 await close();
 ```
 
+For your own accounts signed in by hand, create the profile real: it launches with Chrome's own
+identity, no generated fingerprint, no override, no injected script, and no default timezone
+([anti-detect.md](./anti-detect.md#real-mode)).
+
+```typescript
+const google = await profiles.create({ id: 'google-main', name: 'Google Main', fingerprint: { mode: 'real' } });
+const { engine } = await profiles.launch(google.id);  // 'real'; engine: 'kernel' | 'inject' throws
+```
+
 | Method | Description |
 |--------|-------------|
 | `create(config)` | Create a profile from a `ProfileConfig`. |
@@ -80,8 +89,9 @@ await close();
 | `deleteGroup(groupId)` | Delete a group. |
 | `moveToGroup(profileId, groupId)` | Move a profile into a group, or out with `null`. |
 
-`LaunchResult` carries `wsEndpoint`, `pid`, `port`, `profileId`, `close()` and, when an already
-running browser was returned, `reused: true`.
+`LaunchResult` carries `wsEndpoint`, `pid`, `port`, `profileId`, `close()`, `engine` (`kernel`,
+`inject`, or `real` for a real profile) and, when an already running browser was returned,
+`reused: true`.
 
 ## Option types
 
@@ -92,7 +102,7 @@ interface ProfileConfig {
   proxy?: ProxyConfig;
   timezone?: string;               // e.g. "America/New_York"
   cookies?: ProfileCookie[];
-  fingerprint?: FingerprintConfig;
+  fingerprint?: FingerprintConfig | RealFingerprint;  // { mode: 'real', language? }: Chrome's own identity
   startUrls?: string[];
   tags?: string[];
   groupId?: string;
@@ -115,6 +125,7 @@ interface LaunchOptions {
   slowMo?: number;
   timeout?: number;
   detached?: boolean;              // let Chrome outlive this process (reduced protection)
+  engine?: 'auto' | 'kernel' | 'inject';  // default auto; a real profile accepts only auto
 }
 ```
 
