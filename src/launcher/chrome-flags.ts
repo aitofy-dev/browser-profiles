@@ -17,7 +17,7 @@ export interface ChromeFlagOptions {
     proxyServer?: string;
     /** fingerprint-chromium switches. Empty on the inject engine. */
     kernelFlags?: string[];
-    /** Real profile: no anti-detect flags, and --lang only when the profile pins a language. */
+    /** Real profile: Chrome's own protections stay on, no anti-detect flags, --lang only if pinned. */
     real?: boolean;
 }
 
@@ -37,6 +37,10 @@ const BASE_FLAGS = [
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
 ];
+
+// A real profile holds logged-in accounts and browses untrusted pages, so sandbox,
+// Safe Browsing, popup blocking and updates keep Chrome's defaults.
+const REAL_BASE_FLAGS = ['--no-first-run', '--no-default-browser-check'];
 
 // Drops the automation-controlled bit navigator.webdriver reads.
 const NOT_WEBDRIVER_FLAG = '--disable-blink-features=AutomationControlled';
@@ -81,10 +85,9 @@ export function buildChromeFlags(options: ChromeFlagOptions): string[] {
     const language = profile.fingerprint?.language;
 
     return [
-        ...BASE_FLAGS,
         ...(options.real
-            ? realIdentityFlags(language, proxyServer)
-            : [`--lang=${language || 'en-US'}`, ...ANTI_DETECT_FLAGS, ...kernelFlags]),
+            ? [...REAL_BASE_FLAGS, ...realIdentityFlags(language, proxyServer)]
+            : [...BASE_FLAGS, `--lang=${language || 'en-US'}`, ...ANTI_DETECT_FLAGS, ...kernelFlags]),
         ...(userDataDir ? [`--user-data-dir=${userDataDir}`] : []),
         ...(headless ? HEADLESS_FLAGS : []),
         ...(proxyServer ? [`--proxy-server=${proxyServer}`] : []),

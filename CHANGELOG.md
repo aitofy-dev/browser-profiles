@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   timezone or locale unless the profile sets one. Meant for accounts signed in by hand, where a
   spoofed fingerprint triggers new-device checks. It refuses `engine: "kernel"` and `"inject"` with
   `INVALID_CONFIG`, and rejects `platform`. Existing profiles are unchanged.
+  Real launches keep Chrome's sandbox, Safe Browsing, popup blocking and updates on (no `--no-sandbox`).
 - `browser status` reports each browser's `engine`, and `engine` can now be `real` in launch results
   and lock files. `profile list` shows a Fingerprint column.
 

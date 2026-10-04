@@ -29,6 +29,8 @@ What a real launch does not do:
   installs stored cookies, if any, and watches for the browser to exit
 - no kernel flags and no anti-detect flags except `--disable-blink-features=AutomationControlled`,
   which keeps `navigator.webdriver` false as in a Chrome opened by hand
+- no flag that weakens Chrome's security: the sandbox, Safe Browsing, popup blocking, sync and
+  component updates stay on; only `--no-first-run` and `--no-default-browser-check` are added
 - no timezone and no locale: Chrome keeps the host's clock and language unless the profile sets
   `timezone` (sent as `TZ`) or `language` (sent as `--lang`, which Chrome on macOS ignores; change
   the language in Chrome's settings instead, it is stored in the profile)

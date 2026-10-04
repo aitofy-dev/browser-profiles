@@ -76,6 +76,10 @@ describe('launchChrome with a real profile', () => {
         expect(launched.engine).toBe('real');
         const [{ chromeFlags, envVars }] = fake.launches;
         expect(chromeFlags.filter((flag) => SPOOF_FLAG.test(flag))).toEqual([]);
+        expect(chromeFlags).not.toContain('--no-sandbox');
+        expect(chromeFlags).not.toContain('--disable-background-networking');
+        expect(chromeFlags).not.toContain('--disable-client-side-phishing-detection');
+        expect(chromeFlags).toContain(`--user-data-dir=${path.join(dir, 'data')}`);
         expect(envVars).toBeUndefined();
         expect(fake.cdpCalls).toEqual([]);
         expect(readLockFile(path.join(dir, 'data'))?.engine).toBe('real');
@@ -108,6 +112,8 @@ describe('launchChrome with a generated profile', () => {
         const [{ chromeFlags, envVars }] = fake.launches;
         expect(envVars).toEqual({ TZ: 'Europe/Paris' });
         expect(chromeFlags).toEqual(expect.arrayContaining([
+            '--no-sandbox',
+            '--disable-background-networking',
             '--lang=en-US',
             '--disable-features=IsolateOrigins,site-per-process',
             '--webrtc-ip-handling-policy=disable_non_proxied_udp',
