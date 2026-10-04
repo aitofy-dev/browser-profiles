@@ -1,17 +1,49 @@
 # Anti-detect
 
 What a profile actually hides, how it is applied, and where the limits are. No extension is
-installed. Two engines:
+installed. Two engines, plus a real mode that uses neither:
 
 | Engine | When | How |
 |--------|------|-----|
 | `kernel` | The executable is a [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) build, or `engine: "kernel"` | Chromium spoofs the fingerprint from a per-profile seed (`--fingerprint`). No JavaScript hooks are installed. |
 | `inject` | Stock Google Chrome, or `engine: "inject"` | Scripts and CDP overrides, applied when the browser launches. |
+| `real` | The profile has `fingerprint: { mode: "real" }` | Nothing. Chrome runs with its own identity. See [Real mode](#real-mode). |
 
 `engine` defaults to `auto`: kernel when the binary's switch table (the framework on macOS,
 `chrome.dll` on Windows) contains `fingerprint-platform`, inject otherwise. With no `chromePath` and no `CHROMIUM_PATH`/`CHROME_PATH`, a kernel build at
 `~/.aitofy/browser-profiles/kernel/` or a `Chromium.app` that has the switch is preferred over
 Google Chrome.
+
+## Real mode
+
+For your own accounts, signed in by hand once (Google Cloud, Firebase, Play Console, Cloudflare).
+A spoofed fingerprint on such an account reads as a new device and triggers verification, so a
+real profile spoofs nothing. Create it with `--fingerprint real` (CLI), `fingerprint: "real"`
+(MCP) or `fingerprint: { mode: 'real' }` (library). `browser open` then reports `engine: "real"`,
+and so does `browser status`.
+
+What a real launch does not do:
+
+- no generated fingerprint, user agent or Client Hints override, and no stored GPU
+- no injected script, no per-tab CDP session, no auto-attach: the launcher's only CDP connection
+  installs stored cookies, if any, and watches for the browser to exit
+- no kernel flags and no anti-detect flags except `--disable-blink-features=AutomationControlled`,
+  which keeps `navigator.webdriver` false as in a Chrome opened by hand
+- no flag that weakens Chrome's security: the sandbox, Safe Browsing, popup blocking, sync and
+  component updates stay on; only `--no-first-run` and `--no-default-browser-check` are added
+- no timezone and no locale: Chrome keeps the host's clock and language unless the profile sets
+  `timezone` (sent as `TZ`) or `language` (sent as `--lang`, which Chrome on macOS ignores; change
+  the language in Chrome's settings instead, it is stored in the profile)
+
+What it keeps: the profile's own user-data directory, the CDP endpoint, lock and reuse, `close`,
+the profile's proxy (with the WebRTC policy that stops UDP from bypassing it) and `chromePath`.
+
+What it does not protect: anything. The browser is exactly as identifiable as your own Chrome on
+this machine, and two real profiles on one machine look like the same device. Do not use it for
+accounts that must not be linked. A real profile refuses `engine: "kernel"` or `"inject"` with
+`INVALID_CONFIG`; open it with `auto`. Switching a profile to real drops its stored spoof settings
+except the language, and its stored timezone (often the `America/New_York` default) unless the same
+update sets one. A browser already running keeps its old mode until it is closed.
 
 ## Kernel engine
 

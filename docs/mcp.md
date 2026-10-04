@@ -96,27 +96,31 @@ Tool names are the command names with `_` instead of the dot: `profile.list` bec
 |------|---------|-----------|
 | `profile_list` | List stored browser profiles, optionally filtered by group or tag. | `groupId?`, `tag?` |
 | `profile_get` | Show one profile by id or name, including its proxy and fingerprint. | `idOrName` |
-| `profile_create` | Create a new browser profile with its own storage, proxy and fingerprint. | `name`, `id?`, `proxy?`, `timezone?`, `language?`, `platform?`, `tags?`, `notes?` |
-| `profile_update` | Change fields of an existing profile. Omitted fields are left untouched. | `idOrName`, `name?`, `proxy?` (null removes it), `timezone?`, `language?`, `platform?`, `tags?`, `notes?` |
+| `profile_create` | Create a new browser profile with its own storage, proxy and fingerprint. | `name`, `id?`, `proxy?`, `timezone?`, `fingerprint?` (`generated` or `real`), `language?`, `platform?`, `tags?`, `notes?` |
+| `profile_update` | Change fields of an existing profile. Omitted fields are left untouched. | `idOrName`, `name?`, `proxy?` (null removes it), `timezone?`, `fingerprint?`, `language?`, `platform?`, `tags?`, `notes?` |
 | `profile_delete` | Delete a profile and all of its browser data. Irreversible. | `idOrName`, `force?` |
 | `profile_duplicate` | Copy a profile settings (proxy, timezone, fingerprint) into a new profile with a new id. | `idOrName`, `name?` |
-| `browser_open` | Open Chrome with a stored profile and return its CDP wsEndpoint. | `idOrName`, `headless?`, `startUrl?`, `detached?` |
+| `browser_open` | Open Chrome with a stored profile and return its CDP wsEndpoint. | `idOrName`, `headless?`, `startUrl?`, `detached?`, `engine?` |
 | `browser_launch` | Launch a throwaway Chrome with a random fingerprint and no saved profile. | `proxy?`, `headless?`, `randomFingerprint?` (default true), `detached?` |
 | `browser_close` | Close the browser running for a profile, from any process. | `idOrName` |
 | `browser_close_all` | Close every browser started from this storage path, including temporary sessions. | none |
 | `browser_status` | List browsers currently running for this storage path, with their CDP endpoints. | none |
 | `storage_path` | Print the directory where profiles and browser data are stored. | none |
 
-Argument formats (id/name rules, proxy URLs, timezone, language, platform) are the flag
-descriptions in [cli.md](./cli.md); the MCP input schemas carry the same text.
+Argument formats (id/name rules, proxy URLs, timezone, fingerprint, language, platform) are the
+flag descriptions in [cli.md](./cli.md); the MCP input schemas carry the same text.
+
+`fingerprint: "real"` is for your own accounts signed in by hand: the browser keeps Chrome's own
+identity and `browser_open` reports `engine: "real"`, so an agent can check that nothing was
+spoofed before it touches the account. See [anti-detect.md](./anti-detect.md#real-mode).
 
 Outputs:
 
-- `browser_open` → `{ profileId, wsEndpoint, port, pid, reused, detached }`
-- `browser_launch` → `{ profileId, wsEndpoint, port, pid, temporary: true, detached }`
+- `browser_open` → `{ profileId, wsEndpoint, port, pid, reused, detached, engine }` (`kernel`, `inject` or `real`)
+- `browser_launch` → `{ profileId, wsEndpoint, port, pid, temporary: true, detached, engine }`
 - `browser_close` → `{ profileId, closed }`
 - `browser_close_all` → `{ closed: string[] }`
-- `browser_status` → `{ running: [{ profileId, pid, port, wsEndpoint, startedAt, temporary }] }`
+- `browser_status` → `{ running: [{ profileId, pid, port, wsEndpoint, startedAt, temporary, engine }] }`
 - `storage_path` → `{ path }`
 - `profile_delete` → `{ id, deleted: true }`
 - the `profile_*` tools otherwise return the stored profile object

@@ -28,7 +28,10 @@ export function renderProfile(profile: StoredProfile): string {
     if (profile.notes) lines.push(`Notes:      ${profile.notes}`);
 
     const fingerprint = profile.fingerprint;
-    if (fingerprint && Object.keys(fingerprint).length > 0) {
+    if (fingerprint?.mode === 'real') {
+        lines.push('', 'Fingerprint: real (Chrome\'s own identity, nothing spoofed)');
+        if (fingerprint.language) lines.push(`  Language: ${fingerprint.language}`);
+    } else if (fingerprint && Object.keys(fingerprint).length > 0) {
         lines.push('', 'Fingerprint:');
         if (fingerprint.language) lines.push(`  Language: ${fingerprint.language}`);
         if (fingerprint.platform) lines.push(`  Platform: ${fingerprint.platform}`);

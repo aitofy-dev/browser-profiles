@@ -6,6 +6,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import type { ResolvedEngine } from './types';
 
 /** Default profile store. Never hardcode this anywhere else. */
 export const DEFAULT_STORAGE_PATH = path.join(os.homedir(), '.aitofy', 'browser-profiles');
@@ -74,11 +75,15 @@ export interface BrowserLockInfo {
     /** Placeholder written before Chrome starts: nothing is running behind it yet. */
     claiming?: boolean;
     /** Engine the browser was launched with. Absent on locks written before kernel mode. */
-    engine?: 'kernel' | 'inject';
+    engine?: ResolvedEngine;
 }
 
 export function lockFilePath(userDataDir: string): string {
     return path.join(userDataDir, LOCK_FILE_NAME);
+}
+
+function parseEngine(value: unknown): ResolvedEngine | undefined {
+    return value === 'kernel' || value === 'inject' || value === 'real' ? value : undefined;
 }
 
 export function readLockFile(userDataDir: string): BrowserLockInfo | null {
@@ -94,7 +99,7 @@ export function readLockFile(userDataDir: string): BrowserLockInfo | null {
             proxyUrl: parsed.proxyUrl,
             detached: parsed.detached,
             claiming: parsed.claiming,
-            engine: parsed.engine === 'kernel' || parsed.engine === 'inject' ? parsed.engine : undefined,
+            engine: parseEngine(parsed.engine),
         };
     } catch {
         return null;

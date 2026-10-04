@@ -27,7 +27,8 @@ export const browserStatus = defineCommand({
         for (const browser of output.running) {
             const kind = browser.temporary ? ' (temporary)' : '';
             lines.push(`${browser.profileId}${kind}`);
-            lines.push(`  pid ${browser.pid}, port ${browser.port}, since ${new Date(browser.startedAt).toLocaleString()}`);
+            lines.push(`  pid ${browser.pid}, port ${browser.port}, engine ${browser.engine}, ` +
+                `since ${new Date(browser.startedAt).toLocaleString()}`);
             lines.push(`  ${browser.wsEndpoint}`);
         }
         lines.push('');

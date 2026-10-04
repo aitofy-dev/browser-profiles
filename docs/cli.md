@@ -87,6 +87,7 @@ idOrName.
 | `--id <value>` | Optional stable id: 1-64 chars of letters, digits, hyphen or underscore, e.g. `"acme-fb-01"`. Must not start with `"tmp-"` (reserved for temporary `browser.launch` sessions). Omit to get a random 16-hex-character id. Must not already exist. |
 | `--proxy <value>` | Proxy as a URL with an explicit port: `"<scheme>://[user:pass@]host:port"`. Schemes: http, https, socks5 (socks and socks5h are accepted and normalised to socks5). Percent-encode reserved characters in credentials, e.g. `"http://bob:p%40ss@10.0.0.1:8080"`. Example: `"socks5://gate.provider.net:1080"`. |
 | `--timezone <value>` | IANA timezone id used for the browser clock and Intl output, e.g. `"America/New_York"` or `"Asia/Ho_Chi_Minh"`. Match it to the proxy exit country or the profile becomes trivially detectable. |
+| `--fingerprint <generated\|real>` | `generated` (default) spoofs a consistent fingerprint built from language and platform. `real` keeps Chrome's own identity: no user agent or client hints override, no injected scripts, no timezone or locale change unless `--timezone` or `--language` is set. Use `real` for your own accounts signed in by hand (Google, Firebase, Cloudflare), where a spoofed fingerprint triggers new-device checks. A real profile rejects `--platform` and opens only with `--engine auto`. See [anti-detect.md](./anti-detect.md#real-mode). |
 | `--language <value>` | BCP 47 language tag for navigator.language and the Accept-Language header, e.g. `"en-US"`, `"vi-VN"`, `"de-DE"`. Default `"en-US"`. |
 | `--platform <value>` | navigator.platform value to report. Use exactly one of `"Win32"`, `"MacIntel"` or `"Linux x86_64"`; it must agree with the user agent. |
 | `--tags <value...>` | Free-form labels for filtering, e.g. `["facebook", "client-acme"]`. Pass an array of strings. Repeat the flag or pass a comma-separated list. |
@@ -95,7 +96,10 @@ idOrName.
 ```bash
 browser-profiles create "Acme Main" --id acme-main \
   --proxy socks5://gate.provider.net:1080 --tags facebook,acme
+browser-profiles create "Google Main" --id google-main --fingerprint real
 ```
+
+A real profile is stored with `"fingerprint": { "mode": "real" }` and no default timezone.
 
 ## profile update
 
@@ -107,6 +111,7 @@ Change fields of an existing profile. Omitted fields are left untouched.
 | `--proxy <value>` | Same format as `profile create`. Pass null to remove the proxy; omit to keep the current one. |
 | `--no-proxy` | Clear proxy (sends null). |
 | `--timezone <value>` | As in `profile create`. |
+| `--fingerprint <generated\|real>` | As in `profile create`. Switching to `real` drops the stored spoof settings except the language, and the stored timezone unless `--timezone` is passed in the same update; switching back to `generated` gets a new stored GPU. A browser already running keeps its mode until it is closed. |
 | `--language <value>` | As in `profile create`. |
 | `--platform <value>` | As in `profile create`. |
 | `--tags <value...>` | As in `profile create`. |
@@ -115,6 +120,7 @@ Change fields of an existing profile. Omitted fields are left untouched.
 ```bash
 browser-profiles update acme-main --timezone America/New_York
 browser-profiles update acme-main --no-proxy
+browser-profiles update google-main --fingerprint real
 ```
 
 ## profile delete
@@ -143,10 +149,10 @@ profile returns the running browser with `reused=true`. Close it with `browser c
 | `--headless` | Run Chrome without a visible window. Default false (a real window is far less detectable). Set true only on machines with no display. |
 | `--start-url <value>` | Absolute URL to open in the first tab, e.g. `"https://example.com"`. Omit for a blank tab. |
 | `--detached` | Let Chrome outlive the process that opened it. Default false: the opener keeps the browser protected (per-tab fingerprint injection, authenticated proxy relay) and closes it on exit. Set true only for scripts that must exit immediately; then only flag-level protections remain and an authenticated proxy will not work. Kernel mode is the exception: its spoof is in the Chrome flags, so later tabs stay spoofed after the opener exits. |
-| `--engine <auto\|kernel\|inject>` | Where the fingerprint is applied. `kernel` needs a fingerprint-chromium binary and spoofs inside Chromium with no JavaScript hooks. `inject` patches stock Chrome over CDP. `auto` (default) uses kernel when the executable contains `--fingerprint-platform`, otherwise inject. |
+| `--engine <auto\|kernel\|inject>` | Where the fingerprint is applied. `kernel` needs a fingerprint-chromium binary and spoofs inside Chromium with no JavaScript hooks. `inject` patches stock Chrome over CDP. `auto` (default) uses kernel when the executable contains `--fingerprint-platform`, otherwise inject. A real profile only accepts `auto`; `kernel` or `inject` fails with `INVALID_CONFIG`. |
 
-Output: `{ profileId, wsEndpoint, port, pid, reused, detached, engine }`. `engine` is `kernel` or
-`inject`.
+Output: `{ profileId, wsEndpoint, port, pid, reused, detached, engine }`. `engine` is `kernel`,
+`inject`, or `real` for a real profile (Chrome's own fingerprint, nothing applied).
 
 ## browser launch
 
@@ -185,7 +191,8 @@ Output: `{ closed: string[] }`.
 List browsers that are currently running for this storage path, with their CDP endpoints. Lock
 files left behind by crashed browsers are removed while scanning. No flags beyond the global ones.
 
-Output: `{ running: [{ profileId, pid, port, wsEndpoint, startedAt, temporary }] }`.
+Output: `{ running: [{ profileId, pid, port, wsEndpoint, startedAt, temporary, engine }] }`. `engine`
+is what the browser launched with: `kernel`, `inject` or `real`.
 
 ## storage path
 

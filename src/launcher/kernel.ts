@@ -8,8 +8,8 @@
 
 import fs from 'fs';
 import path from 'path';
-import type { FingerprintConfig, StoredProfile } from '../types';
-import type { FingerprintEngine, ResolvedEngine } from '../types';
+import { spoofSettings } from '../types';
+import type { FingerprintConfig, FingerprintEngine, SpoofEngine, StoredProfile } from '../types';
 import { FINGERPRINT_DEFAULTS } from '../fingerprint';
 
 export const KERNEL_SWITCH = '--fingerprint-platform';
@@ -113,7 +113,7 @@ function fileContains(filePath: string, size: number): boolean {
  * kernel without the switch throws: skipping the hooks on stock Chrome would
  * launch a browser with no spoof at all.
  */
-export function resolveEngine(requested: FingerprintEngine, binaryIsKernel: boolean): ResolvedEngine {
+export function resolveEngine(requested: FingerprintEngine, binaryIsKernel: boolean): SpoofEngine {
     if (requested === 'inject') return 'inject';
     if (requested === 'kernel') {
         if (!binaryIsKernel) throw new Error(KERNEL_REQUIRED_MESSAGE);
@@ -175,7 +175,7 @@ export function buildKernelFlags(
     timezone: string,
     host: KernelPlatform = hostKernelPlatform()
 ): string[] {
-    const fingerprint = profile.fingerprint;
+    const fingerprint = spoofSettings(profile.fingerprint);
     const language = fingerprint?.language || FINGERPRINT_DEFAULTS.language;
     const platform = fingerprint?.platform ? kernelPlatform(fingerprint.platform) : host;
     const flags = [

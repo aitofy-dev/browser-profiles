@@ -120,6 +120,7 @@ export type {
     LaunchResult,
     FingerprintEngine,
     ResolvedEngine,
+    SpoofEngine,
 
     // Proxy & Cookie types
     ProxyConfig,
@@ -127,6 +128,8 @@ export type {
 
     // Fingerprint types
     FingerprintConfig,
+    ProfileFingerprint,
+    RealFingerprint,
     FingerprintGenerateOptions,
     ScreenConfig,
     WebGLConfig,
@@ -205,4 +208,4 @@ export type {
 } from './integrations/playwright';
 
 // Version
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';

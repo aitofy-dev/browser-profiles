@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Err, Ok } from '../types';
-import type { BrowserError, ProxyConfig, Result } from '../types';
+import type { BrowserError, ProxyConfig, ResolvedEngine, Result } from '../types';
 import { launchChromeStandalone } from '../chrome-launcher';
 import { generateFingerprint } from '../fingerprint';
 import { defineCommand } from './define';
@@ -18,7 +18,7 @@ export interface BrowserLaunched {
     /** True when Chrome was started to outlive the opener (reduced protection). */
     detached: boolean;
     /** kernel spoofs inside Chromium. inject patches from JavaScript. */
-    engine: 'kernel' | 'inject';
+    engine: ResolvedEngine;
 }
 
 export const browserLaunch = defineCommand({

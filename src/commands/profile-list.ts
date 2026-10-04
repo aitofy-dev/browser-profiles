@@ -3,10 +3,11 @@ import { Ok } from '../types';
 import type { Result, StoredProfile } from '../types';
 import { defineCommand } from './define';
 
-const COLUMNS = { id: 36, name: 17, proxy: 18 };
+const COLUMNS = { id: 36, name: 17, proxy: 18, mode: 11 };
 
-function row(id: string, name: string, proxy: string, created: string): string {
-    return `${id.padEnd(COLUMNS.id)} | ${name.padEnd(COLUMNS.name)} | ${proxy.padEnd(COLUMNS.proxy)} | ${created}`;
+function row(id: string, name: string, proxy: string, mode: string, created: string): string {
+    return `${id.padEnd(COLUMNS.id)} | ${name.padEnd(COLUMNS.name)} | ${proxy.padEnd(COLUMNS.proxy)} | ` +
+        `${mode.padEnd(COLUMNS.mode)} | ${created}`;
 }
 
 export const profileList = defineCommand({
@@ -41,8 +42,8 @@ export const profileList = defineCommand({
             '',
             'Browser Profiles:',
             '',
-            row('ID', 'Name', 'Proxy', 'Created'),
-            `${'-'.repeat(COLUMNS.id)}-|-${'-'.repeat(COLUMNS.name)}-|-${'-'.repeat(COLUMNS.proxy)}-|----------------`,
+            row('ID', 'Name', 'Proxy', 'Fingerprint', 'Created'),
+            [COLUMNS.id, COLUMNS.name, COLUMNS.proxy, COLUMNS.mode, 15].map((width) => '-'.repeat(width)).join('-|-'),
         ];
 
         for (const profile of profiles) {
@@ -50,6 +51,7 @@ export const profileList = defineCommand({
                 profile.id.substring(0, COLUMNS.id),
                 (profile.name || 'Unnamed').substring(0, COLUMNS.name),
                 profile.proxy ? `${profile.proxy.host}:${profile.proxy.port}`.substring(0, COLUMNS.proxy) : 'No proxy',
+                profile.fingerprint?.mode === 'real' ? 'real' : 'generated',
                 new Date(profile.createdAt).toLocaleDateString()
             ));
         }

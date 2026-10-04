@@ -34,7 +34,10 @@ mode ignores a pinned user agent so the UA stays the binary's own version. The W
 vendor/renderer is picked once per profile, consistent with its platform, and stored in
 fingerprint.webgl (inject mode; the kernel derives the GPU from the seed). Every worker target
 (dedicated, module, shared, service) runs the same spoof as the main thread. Authenticated proxies are handled by a local relay.
-Profiles persist between runs, so logins survive.
+Profiles persist between runs, so logins survive. A profile created with fingerprint=real
+(stored as fingerprint: {mode: "real"}) launches with Chrome's own identity: no engine, no user
+agent or Client Hints override, no injected script, no timezone or locale change unless the
+profile sets one. Use it for accounts signed in by hand; a real profile refuses engine kernel/inject.
 
 Benchmark (docs/benchmark.md, scripts/measure.mjs): kernel mode scores 100% on browserscan and passes
 a Cloudflare challenge, like AdsPower; inject mode scores 85% and creepjs flags its hooks.
@@ -83,11 +86,12 @@ profile_get         Show one profile with proxy and fingerprint.
                     args: idOrName (string, required)
                     out: StoredProfile
 profile_create      Create a profile with its own storage, proxy and fingerprint.
-                    args: name (required), id?, proxy?, timezone?, language?, platform?, tags?, notes?
+                    args: name (required), id?, proxy?, timezone?, fingerprint? ("generated" | "real"),
+                          language?, platform?, tags?, notes?
                     out: StoredProfile
 profile_update      Change fields of a profile; omitted fields stay as they are.
                     args: idOrName (required), name?, proxy? (null removes the proxy), timezone?,
-                          language?, platform?, tags?, notes?
+                          fingerprint?, language?, platform?, tags?, notes?
                     out: StoredProfile
 profile_delete      Delete a profile and all of its browser data. Irreversible.
                     args: idOrName (required), force? (boolean, closes a running browser first)
@@ -97,8 +101,10 @@ profile_duplicate   Copy a profile's settings into a new profile with a new id.
                     out: StoredProfile
 browser_open        Open Chrome with a stored profile and return its CDP endpoint.
                     args: idOrName (required), headless? (default false), startUrl? (absolute URL),
-                          detached? (default false; true = Chrome outlives the caller, reduced protection)
-                    out: {profileId, wsEndpoint, port, pid, reused}
+                          detached? (default false; true = Chrome outlives the caller, reduced protection),
+                          engine? ("auto" | "kernel" | "inject"; a real profile accepts only "auto")
+                    out: {profileId, wsEndpoint, port, pid, reused, detached, engine}
+                         engine is "kernel", "inject", or "real" (Chrome's own fingerprint)
 browser_launch      Throwaway Chrome with a random fingerprint and no saved profile. Nothing persists.
                     args: proxy?, headless? (default false), randomFingerprint? (default true), detached? (default false)
                     out: {profileId, wsEndpoint, port, pid, temporary: true}
@@ -110,7 +116,7 @@ browser_close_all   Close every browser started from this storage path, temporar
                     out: {closed: string[]}
 browser_status      Running browsers with their CDP endpoints. Stale lock files are cleaned up.
                     args: none
-                    out: {running: [{profileId, pid, port, wsEndpoint, startedAt, temporary}]}
+                    out: {running: [{profileId, pid, port, wsEndpoint, startedAt, temporary, engine}]}
 storage_path        Directory where profiles and browser data are stored.
                     args: none
                     out: {path}
@@ -124,6 +130,9 @@ proxy       A URL with an explicit port: <scheme>://[user:pass@]host:port
             Schemes: http, https, socks5 (socks and socks5h are normalised to socks5).
             Percent-encode reserved characters in credentials: "http://bob:p%40ss@10.0.0.1:8080".
 timezone    IANA id, e.g. "America/New_York". Match it to the proxy exit country.
+fingerprint "generated" (default, spoofed) or "real" (Chrome's own identity, for hand-made logins).
+            A real profile rejects platform. Switching to real keeps only the language and drops
+            the stored timezone unless timezone is passed in the same update.
 language    BCP 47 tag, e.g. "en-US", "vi-VN". Default "en-US".
 platform    Exactly one of "Win32", "MacIntel", "Linux x86_64". Must agree with the user agent.
 tags        Array of strings, e.g. ["facebook", "client-acme"].
@@ -143,11 +152,11 @@ Command tree, with the short top-level alias in brackets. Every command accepts 
 
 browser-profiles profile list [list, ls]            --group-id <id> --tag <tag>
 browser-profiles profile get <idOrName> [info]
-browser-profiles profile create <name> [create]     --id --proxy --timezone --language --platform --tags --notes
-browser-profiles profile update <idOrName> [update] --name --proxy --timezone --language --platform --tags --notes
+browser-profiles profile create <name> [create]     --id --proxy --timezone --fingerprint --language --platform --tags --notes
+browser-profiles profile update <idOrName> [update] --name --proxy --timezone --fingerprint --language --platform --tags --notes
 browser-profiles profile delete <idOrName> [delete, rm]  --force
 browser-profiles profile duplicate <idOrName> [duplicate] --name
-browser-profiles browser open <idOrName> [open]     --headless --start-url <url> --detached
+browser-profiles browser open <idOrName> [open]     --headless --start-url <url> --detached --engine
 browser-profiles browser launch [launch]            --proxy --headless --no-random-fingerprint --detached
 browser-profiles browser close <idOrName> [close]
 browser-profiles browser close-all [close-all]

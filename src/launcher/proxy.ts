@@ -3,7 +3,7 @@
 // ============================================================================
 
 import http from 'http';
-import type { ProxyConfig } from '../types';
+import type { ProxyConfig, StoredProfile } from '../types';
 import { createLogger } from '../log';
 import { loadProxyChain } from './deps';
 
@@ -120,6 +120,24 @@ export async function autoDetectTimezone(proxy: ProxyConfig): Promise<string> {
         return geo.timezone;
     }
     return FALLBACK_TIMEZONE;
+}
+
+/** Timezone for Chrome's TZ, from the profile, else the proxy exit IP, else this host. */
+export async function resolveTimezone(profile: StoredProfile, relayUrl: string | undefined): Promise<string> {
+    if (profile.timezone) return profile.timezone;
+
+    if (profile.proxy) {
+        const exit = relayUrl ? await detectExitLocation(relayUrl) : null;
+        const geo = exit ?? await detectTimezoneFromIP(profile.proxy.host);
+        if (geo) {
+            log.info(`Auto-detected timezone: ${geo.timezone} (${geo.city}, ${geo.country})`);
+            return geo.timezone;
+        }
+    }
+
+    const systemTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    log.debug(`Using system timezone: ${systemTimezone}`);
+    return systemTimezone;
 }
 
 /**

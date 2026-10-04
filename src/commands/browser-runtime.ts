@@ -6,6 +6,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import type { Logger } from '../log';
+import type { ResolvedEngine } from '../types';
 import {
     deleteLockFile,
     isProcessAlive,
@@ -27,6 +28,8 @@ export interface RunningBrowser {
     startedAt: number;
     /** True for `browser.launch` sessions that have no saved profile. */
     temporary: boolean;
+    /** What the browser launched with. real: Chrome's own identity, nothing spoofed. */
+    engine: ResolvedEngine;
 }
 
 interface LockedDir {
@@ -119,6 +122,8 @@ export async function scanRunning(storagePath: string, log: Logger): Promise<Run
             wsEndpoint,
             startedAt: entry.lock.startedAt,
             temporary: entry.temporary,
+            // Locks from before kernel mode carry no engine; those launches were inject.
+            engine: entry.lock.engine ?? 'inject',
         });
     }
 

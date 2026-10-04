@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { Err, Ok } from '../types';
-import type { BrowserError, FingerprintConfig, ProxyConfig, Result, StoredProfile } from '../types';
+import type { BrowserError, ProxyConfig, Result, StoredProfile } from '../types';
 import { defineCommand } from './define';
+import { nextFingerprint } from './fingerprint-input';
 import { renderProfile } from './profile-get';
 import { parseProxyUrl } from './proxy-url';
 import {
+    fingerprintModeField,
     languageField,
     notesField,
     platformField,
@@ -12,14 +14,6 @@ import {
     tagsField,
     timezoneField,
 } from './fields';
-
-/** Only set fingerprint keys the caller actually provided. */
-export function buildFingerprint(language?: string, platform?: string): FingerprintConfig | undefined {
-    const fingerprint: FingerprintConfig = {};
-    if (language) fingerprint.language = language;
-    if (platform) fingerprint.platform = platform;
-    return Object.keys(fingerprint).length > 0 ? fingerprint : undefined;
-}
 
 export const profileCreate = defineCommand({
     name: 'profile.create',
@@ -45,12 +39,17 @@ export const profileCreate = defineCommand({
             ),
         proxy: optionalProxyUrlField,
         timezone: timezoneField,
+        fingerprint: fingerprintModeField,
         language: languageField,
         platform: platformField,
         tags: tagsField,
         notes: notesField,
     }),
     async run(ctx, input): Promise<Result<StoredProfile>> {
+        const { fingerprint: mode, language, platform } = input;
+        const fingerprint = nextFingerprint(undefined, { mode, language, platform });
+        if (!fingerprint.ok) return Err(fingerprint.error);
+
         let proxy: ProxyConfig | undefined;
         if (input.proxy) {
             const parsed = parseProxyUrl(input.proxy);
@@ -64,7 +63,7 @@ export const profileCreate = defineCommand({
                 name: input.name,
                 proxy,
                 timezone: input.timezone,
-                fingerprint: buildFingerprint(input.language, input.platform),
+                fingerprint: fingerprint.data,
                 tags: input.tags,
                 notes: input.notes,
             });

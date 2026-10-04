@@ -2,6 +2,7 @@
 // @aitofy/browser-profiles - Puppeteer Integration
 // ============================================================================
 
+import { spoofSettings } from '../types';
 import type { StoredProfile, LaunchOptions, LaunchResult, ProxyConfig, ProfileConfig } from '../types';
 import { BrowserProfiles } from '../profile-manager';
 import { createLogger } from '../log';
@@ -291,8 +292,8 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
     // on its own CDP client do NOT reach pages driven by this Puppeteer
     // connection. Re-injecting here is what actually protects an inject-mode page.
     // Kernel mode already spoofed inside Chromium; a hook here is the tell.
-    if (launch.engine !== 'kernel') {
-        const bundle = getProfileProtectionScripts(profile.fingerprint);
+    if (launch.engine === 'inject') {
+        const bundle = getProfileProtectionScripts(spoofSettings(profile.fingerprint));
         const injectProtectionScripts = async (targetPage: PuppeteerPage) => {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             await (targetPage as any).evaluateOnNewDocument(bundle);
@@ -400,9 +401,9 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
     const pages = await browser.pages();
     const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
-    if (launch.engine !== 'kernel') {
+    if (launch.engine === 'inject') {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (page as any).evaluateOnNewDocument(getProfileProtectionScripts(profile.fingerprint));
+        await (page as any).evaluateOnNewDocument(getProfileProtectionScripts(spoofSettings(profile.fingerprint)));
     }
 
     // Close function - by default only closes this session's page
