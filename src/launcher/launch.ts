@@ -17,6 +17,7 @@ import type { ProtectionPlan } from './protections';
 import {
     assertDetachedLaunchAllowed,
     closeProxyRelay,
+    detectExitLocation,
     detectTimezoneFromIP,
     startProxyRelay,
 } from './proxy';
@@ -41,12 +42,13 @@ export interface ChromeLaunchOptions extends LaunchOptions {
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-/** Timezone for Chrome's TZ, from the profile, else the proxy exit node, else this host. */
-async function resolveTimezone(profile: StoredProfile): Promise<string> {
+/** Timezone for Chrome's TZ, from the profile, else the proxy exit IP, else this host. */
+async function resolveTimezone(profile: StoredProfile, relayUrl: string | undefined): Promise<string> {
     if (profile.timezone) return profile.timezone;
 
     if (profile.proxy) {
-        const geo = await detectTimezoneFromIP(profile.proxy.host);
+        const exit = relayUrl ? await detectExitLocation(relayUrl) : null;
+        const geo = exit ?? await detectTimezoneFromIP(profile.proxy.host);
         if (geo) {
             log.info(`Auto-detected timezone: ${geo.timezone} (${geo.city}, ${geo.country})`);
             return geo.timezone;
@@ -171,7 +173,7 @@ async function launchClaimed(options: ChromeLaunchOptions, userDataDir: string):
         );
     }
     const relayUrl = profile.proxy ? await startProxyRelay(profile.proxy) : undefined;
-    const timezone = await resolveTimezone(profile);
+    const timezone = await resolveTimezone(profile, relayUrl);
 
     log.debug(`Launching Chrome: ${executablePath}`);
     log.debug(`User data dir: ${userDataDir}`);

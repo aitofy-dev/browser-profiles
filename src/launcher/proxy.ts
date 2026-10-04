@@ -2,6 +2,7 @@
 // @aitofy/browser-profiles - Proxy relay and IP-based timezone detection
 // ============================================================================
 
+import http from 'http';
 import type { ProxyConfig } from '../types';
 import { createLogger } from '../log';
 import { loadProxyChain } from './deps';
@@ -54,27 +55,61 @@ export interface GeoLocation {
 export async function detectTimezoneFromIP(ip: string): Promise<GeoLocation | null> {
     try {
         // ip-api.com: free, no API key, 45 requests/minute.
-        const response = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city,timezone`);
-        const data = await response.json() as {
-            status: string;
-            country: string;
-            regionName: string;
-            city: string;
-            timezone: string;
-        };
-
-        if (data.status === 'success') {
-            return {
-                timezone: data.timezone,
-                country: data.country,
-                city: data.city,
-                region: data.regionName,
-            };
-        }
-        return null;
+        const response = await fetch(`http://ip-api.com/json/${ip}?fields=${GEO_FIELDS}`);
+        return parseGeo(await response.text());
     } catch {
         return null;
     }
+}
+
+const GEO_FIELDS = 'status,country,regionName,city,timezone';
+
+function parseGeo(body: string): GeoLocation | null {
+    const data = JSON.parse(body) as {
+        status?: string;
+        country?: string;
+        regionName?: string;
+        city?: string;
+        timezone?: string;
+    };
+    if (data.status !== 'success' || !data.timezone) return null;
+    return {
+        timezone: data.timezone,
+        country: data.country ?? '',
+        city: data.city ?? '',
+        region: data.regionName ?? '',
+    };
+}
+
+/**
+ * Locate the IP a site actually sees by asking through the relay. A gateway proxy's
+ * host is not its exit IP, so looking the host up can return another country.
+ * @returns Geo info, or null when the lookup fails.
+ */
+export function detectExitLocation(relayUrl: string, timeoutMs = 10_000): Promise<GeoLocation | null> {
+    const relay = new URL(relayUrl);
+    return new Promise((resolve) => {
+        const request = http.get({
+            host: relay.hostname,
+            port: relay.port,
+            path: `http://ip-api.com/json/?fields=${GEO_FIELDS}`,
+            headers: { host: 'ip-api.com' },
+            timeout: timeoutMs,
+        }, (response) => {
+            let body = '';
+            response.setEncoding('utf8');
+            response.on('data', (chunk: string) => { body += chunk; });
+            response.on('end', () => {
+                try {
+                    resolve(parseGeo(body));
+                } catch {
+                    resolve(null);
+                }
+            });
+        });
+        request.on('timeout', () => request.destroy());
+        request.on('error', () => resolve(null));
+    });
 }
 
 /** Timezone of the proxy exit node, or the fallback when it cannot be resolved. */
