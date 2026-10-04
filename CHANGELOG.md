@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
   A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
   Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+- `docs/anti-detect.md` names the kernel build that was tested, with its SHA-256, and states what
+  kernel mode does not cover: Windows claimed on Apple Silicon, and Widevine.
 - Detector scores in the README now come from `scripts/measure.mjs`, run against AdsPower, GPM
   Login and Multilogin on the same machine and proxy: see `docs/benchmark.md`. The earlier numbers
   could not be reproduced.

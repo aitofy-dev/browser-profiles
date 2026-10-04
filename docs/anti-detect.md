@@ -31,6 +31,19 @@ a new one. Flags passed to the binary:
 | Canvas, audio | On, unless the profile sets that surface to `real` (`--disable-spoofing`) |
 | WebGL, fonts, client rects, device memory, webdriver | Derived inside the binary from the seed. `fingerprint.webgl` is not applied; current kernels no longer accept a vendor string. |
 
+### Which binary
+
+The library drives whatever binary it is given and does not ship one. Any build can be chosen with
+`chromePath`, `CHROMIUM_PATH` or `CHROME_PATH` ([configuration.md](./configuration.md#chrome-executable)).
+The build the benchmark ran on:
+
+| Build | Platform | SHA-256 |
+|-------|----------|---------|
+| [fingerprint-chromium 148.0.7778.215-1.1](https://github.com/adryfish/fingerprint-chromium/releases/tag/148.0.7778.215) | macOS arm64 (`…_macos.dmg`) | `b72f091e2e1a7583eed389c4b8e3534ed355e568af8c8bbf8fc30a25e23ca679` |
+
+The binary is a third party's: its fingerprint quality, update pace and security fixes are not
+something this library can promise. It trails Chrome stable, which ships a major every two weeks.
+
 Cookies are still installed once with `Storage.setCookies`. The launcher keeps one CDP connection
 that pauses each new page only to send `Emulation.setLocaleOverride`: Chrome on macOS ignores
 `--lang`, so without it `Intl` reports the host's locale. No script and no other override is sent.
@@ -109,6 +122,13 @@ return; kernel mode does not install them.
   library's own Puppeteer and Playwright integrations the gap is closed, because they re-inject the
   same bundle with `evaluateOnNewDocument` / `addInitScript`. Kernel mode does not inject, so this
   race does not apply.
+- Kernel mode claiming Windows on an Apple Silicon Mac is not well supported. The CPU shows
+  through (fingerprint.com reports a virtual machine), and pixelscan reports masking because the
+  binary lacks the full set of Windows core fonts. Claim the host's OS, which is the default, or run
+  Windows profiles on a Windows machine.
+- fingerprint-chromium builds ship without Widevine, which Google Chrome always has, so a page that
+  asks for `com.widevine.alpha` can tell the kernel from Chrome, and DRM video does not play. The
+  library does not add it: Widevine is licensed by Google and is not ours to copy or distribute.
 - Worker targets are only spoofed while the launching process holds its CDP connection. With
   `detached: true`, module and service workers keep the real values; only `Worker` and
   `SharedWorker` are wrapped from the page.
