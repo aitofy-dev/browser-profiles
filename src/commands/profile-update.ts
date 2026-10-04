@@ -2,10 +2,12 @@ import { z } from 'zod';
 import { Err, Ok } from '../types';
 import type { BrowserError, ProfileConfig, Result, StoredProfile } from '../types';
 import { defineCommand, resolveProfile } from './define';
+import { nextFingerprint } from './fingerprint-input';
 import { renderProfile } from './profile-get';
 import { parseProxyUrl } from './proxy-url';
 import {
     PROXY_URL_DESCRIPTION,
+    fingerprintModeField,
     idOrNameField,
     languageField,
     notesField,
@@ -27,6 +29,7 @@ export const profileUpdate = defineCommand({
             .optional()
             .describe(`${PROXY_URL_DESCRIPTION} Pass null to remove the proxy; omit to keep the current one.`),
         timezone: timezoneField,
+        fingerprint: fingerprintModeField,
         language: languageField,
         platform: platformField,
         tags: tagsField,
@@ -51,13 +54,10 @@ export const profileUpdate = defineCommand({
             updates.proxy = parsed.data;
         }
 
-        if (input.language !== undefined || input.platform !== undefined) {
-            updates.fingerprint = {
-                ...current.fingerprint,
-                ...(input.language === undefined ? {} : { language: input.language }),
-                ...(input.platform === undefined ? {} : { platform: input.platform }),
-            };
-        }
+        const { fingerprint: mode, language, platform } = input;
+        const fingerprint = nextFingerprint(current.fingerprint, { mode, language, platform });
+        if (!fingerprint.ok) return Err(fingerprint.error);
+        if (fingerprint.data) updates.fingerprint = fingerprint.data;
 
         const updated = await ctx.profiles.update(current.id, updates);
         if (!updated) {

@@ -97,3 +97,16 @@ export const engineField = z
         'the kernel at ~/.aitofy/browser-profiles/kernel/ or set CHROMIUM_PATH. ' +
         'Builds: https://github.com/adryfish/fingerprint-chromium/releases'
     );
+
+export const fingerprintModeField = z
+    .enum(['generated', 'real'])
+    .optional()
+    .describe(
+        '"generated" (default) spoofs a consistent fingerprint built from language and platform. ' +
+        '"real" keeps Chrome\'s own identity: no user agent or client hints override, no injected ' +
+        'scripts, no timezone or locale change unless timezone or language is set on the profile. ' +
+        'Use real for your own accounts signed in by hand (Google, Firebase, Cloudflare), where a ' +
+        'spoofed fingerprint triggers new-device checks. A real profile rejects platform and opens ' +
+        'only with engine "auto". Switching to real drops the stored spoof settings except language, ' +
+        'and the stored timezone unless timezone is passed in the same call.'
+    );

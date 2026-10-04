@@ -232,3 +232,64 @@ describe('atomic config writes', () => {
         expect(JSON.parse(fs.readFileSync(path.join(dir, 'config.json'), 'utf-8')).notes).toBe('changed');
     });
 });
+
+describe('real fingerprint mode', () => {
+    it('round-trips create, get, list and update without spoof settings', async () => {
+        const created = await createProfile({ name: 'Google Main', fingerprint: 'real' });
+        expect(created.fingerprint).toEqual({ mode: 'real' });
+        expect(created.timezone).toBeUndefined();
+
+        const got = await runCommand(ctx, command('profile.get'), { idOrName: 'Google Main' });
+        expect((got.data as StoredProfile).fingerprint).toEqual({ mode: 'real' });
+        const listed = await runCommand(ctx, command('profile.list'), {});
+        expect((listed.data as StoredProfile[])[0].fingerprint?.mode).toBe('real');
+        expect(command('profile.list').render(listed.data)).toContain('| real ');
+
+        const updated = await runCommand(ctx, command('profile.update'), { idOrName: created.id, language: 'vi-VN' });
+        expect((updated.data as StoredProfile).fingerprint).toEqual({ mode: 'real', language: 'vi-VN' });
+        expect(command('profile.get').render(updated.data)).toContain('Fingerprint: real');
+    });
+
+    it('rejects platform on a real profile at create and update', async () => {
+        const create = await runCommand(ctx, command('profile.create'), {
+            name: 'Bad', fingerprint: 'real', platform: 'Win32',
+        });
+        expect(create.ok).toBe(false);
+        expect(create.error?.code).toBe('INVALID_CONFIG');
+        expect(create.error?.message).toContain('platform');
+
+        const real = await createProfile({ name: 'Real', fingerprint: 'real' });
+        const update = await runCommand(ctx, command('profile.update'), { idOrName: real.id, platform: 'Win32' });
+        expect(update.error?.code).toBe('INVALID_CONFIG');
+    });
+
+    it('switches an existing profile to real and back', async () => {
+        const spoofed = await createProfile({ name: 'Switch', language: 'de-DE', platform: 'MacIntel' });
+        const real = await runCommand(ctx, command('profile.update'), { idOrName: spoofed.id, fingerprint: 'real' });
+        expect((real.data as StoredProfile).fingerprint).toEqual({ mode: 'real', language: 'de-DE' });
+        // The create-time New York default must not follow the profile into real mode.
+        expect((real.data as StoredProfile).timezone).toBeUndefined();
+
+        const back = await runCommand(ctx, command('profile.update'), { idOrName: spoofed.id, fingerprint: 'generated' });
+        const fingerprint = (back.data as StoredProfile).fingerprint;
+        expect(fingerprint?.mode).toBeUndefined();
+        expect(fingerprint?.language).toBe('de-DE');
+        expect(fingerprint && 'webgl' in fingerprint && fingerprint.webgl?.renderer).toBeTruthy();
+
+        const pinned = await runCommand(ctx, command('profile.update'), {
+            idOrName: spoofed.id, fingerprint: 'real', timezone: 'Asia/Tokyo',
+        });
+        expect((pinned.data as StoredProfile).timezone).toBe('Asia/Tokyo');
+    });
+
+    it('leaves a default profile as it was: generated, New York, a stored GPU', async () => {
+        const created = await createProfile({ name: 'Default' });
+        expect(created.timezone).toBe('America/New_York');
+        expect(created.fingerprint?.mode).toBeUndefined();
+        const stored = JSON.parse(
+            fs.readFileSync(path.join(storagePath, 'profiles', created.id, 'config.json'), 'utf-8')
+        );
+        expect(stored.fingerprint).not.toHaveProperty('mode');
+        expect(stored.fingerprint.webgl.renderer).toBeTruthy();
+    });
+});
