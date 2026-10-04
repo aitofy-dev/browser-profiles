@@ -2,8 +2,8 @@
 // @aitofy/browser-profiles - Anti-detect injections, applied per CDP session
 // ============================================================================
 
-import type { ProfileCookie, StoredProfile } from '../types';
-import { FINGERPRINT_DEFAULTS, getProfileProtectionScripts } from '../fingerprint';
+import type { ProfileCookie, ResolvedEngine, StoredProfile } from '../types';
+import { FINGERPRINT_DEFAULTS, getProfileProtectionScripts, getProfileWorkerScript } from '../fingerprint';
 import { buildUserAgentMetadata, resolveUserAgent, FALLBACK_CHROME_VERSION } from '../user-agent';
 import type { ChromeVersion } from '../user-agent';
 import type { CdpClient, CdpParams, CdpResult } from './deps';
@@ -26,10 +26,16 @@ export function sessionOf(client: CdpClient, sessionId?: string): CdpSession {
 export interface ProtectionPlan {
     userAgentOverride: CdpParams;
     initScript: string;
+    /** Navigator/WebGL spoof evaluated in worker targets before they run. */
+    workerScript: string;
     timezoneId: string;
+    /** BCP 47 locale for Intl. Chrome on macOS ignores --lang and uses the system locale. */
+    locale: string;
     cookies: CdpParams[];
     /** Set when the profile pins a UA claiming another Chrome major than the browser running it. */
     userAgentMismatch: { claimed: number; running: number } | null;
+    /** kernel: the binary owns the fingerprint; only the locale override is sent. */
+    engine: ResolvedEngine;
 }
 
 function cookieParams(cookie: ProfileCookie): CdpParams {
@@ -46,13 +52,20 @@ function cookieParams(cookie: ProfileCookie): CdpParams {
     };
 }
 
+/** Matches navigator.languages ([language, primary]); Chrome adds the q-values to the header itself. */
+function acceptLanguageHeader(language: string): string {
+    const primary = language.split('-')[0];
+    return primary === language ? language : `${language},${primary}`;
+}
+
 /** Pure: turn a profile into the exact CDP payloads its tabs need. */
 /** `timezoneId` is the timezone Chrome was started with (TZ env), so Intl and the clock agree. */
 /** `chromeVersion` is the version the browser really reports, so the UA cannot claim another one. */
 export function buildProtectionPlan(
     profile: StoredProfile,
     timezoneId: string = profile.timezone || FALLBACK_TIMEZONE,
-    chromeVersion: ChromeVersion = FALLBACK_CHROME_VERSION
+    chromeVersion: ChromeVersion = FALLBACK_CHROME_VERSION,
+    engine: ResolvedEngine = 'inject'
 ): ProtectionPlan {
     const platform = profile.fingerprint?.platform || FINGERPRINT_DEFAULTS.platform;
     const language = profile.fingerprint?.language || FINGERPRINT_DEFAULTS.language;
@@ -66,13 +79,18 @@ export function buildProtectionPlan(
         userAgentOverride: {
             userAgent,
             platform,
-            acceptLanguage: language,
+            acceptLanguage: acceptLanguageHeader(language),
             userAgentMetadata: buildUserAgentMetadata(platform, version),
         },
-        initScript: getProfileProtectionScripts(profile.fingerprint),
+        initScript: engine === 'kernel' ? '' : getProfileProtectionScripts(profile.fingerprint),
+        workerScript: engine === 'kernel' ? '' : getProfileWorkerScript(profile.fingerprint, userAgent),
         timezoneId,
+        locale: language,
         cookies: (profile.cookies ?? []).map(cookieParams),
-        userAgentMismatch: mismatch ? { claimed: version.major, running: chromeVersion.major } : null,
+        userAgentMismatch: engine === 'kernel'
+            ? null
+            : (mismatch ? { claimed: version.major, running: chromeVersion.major } : null),
+        engine,
     };
 }
 
@@ -81,12 +99,31 @@ export function buildProtectionPlan(
  * Both the tab Chrome starts with and every auto-attached tab go through here.
  */
 export async function applyProtections(session: CdpSession, plan: ProtectionPlan): Promise<void> {
+    // Hooks on top of a kernel build are the signal detectors look for. The locale is
+    // the exception: Chrome on macOS ignores --lang, and no kernel switch sets Intl.
+    if (plan.engine === 'kernel') {
+        await session.send('Emulation.setLocaleOverride', { locale: plan.locale });
+        return;
+    }
+
     await session.send('Network.enable');
     await session.send('Network.setUserAgentOverride', plan.userAgentOverride);
     // New-document scripts only run for a session whose Page agent is enabled.
     await session.send('Page.enable');
     await session.send('Page.addScriptToEvaluateOnNewDocument', { source: plan.initScript });
     await session.send('Emulation.setTimezoneOverride', { timezoneId: plan.timezoneId });
+    await session.send('Emulation.setLocaleOverride', { locale: plan.locale });
+}
+
+/**
+ * Apply a plan to a worker paused at start. Dedicated workers inherit the
+ * page's overrides; shared and service workers have their own, set here.
+ */
+export async function applyWorkerProtections(session: CdpSession, plan: ProtectionPlan): Promise<void> {
+    if (plan.engine === 'kernel') return;
+
+    await session.send('Network.setUserAgentOverride', plan.userAgentOverride);
+    await session.send('Runtime.evaluate', { expression: plan.workerScript });
 }
 
 /**

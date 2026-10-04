@@ -15,8 +15,8 @@ Failed to open browser for "acme-main": Chrome/Chromium not found. Please instal
 ```
 
 Error code `CHROME_NOT_FOUND`. The launcher looks at an explicit `chromePath`, then `CHROMIUM_PATH`
-or `CHROME_PATH`, then the platform's usual install locations, and each candidate must exist on
-disk.
+or `CHROME_PATH`, then a fingerprint-chromium kernel, then the platform's usual install locations,
+and each candidate must exist on disk.
 
 Install Google Chrome, or point at the binary you have:
 
@@ -26,6 +26,21 @@ CHROME_PATH=/opt/google/chrome/chrome browser-profiles open acme-main
 
 From the library, pass it instead: `new BrowserProfiles({ chromePath })` or
 `profiles.launch(id, { chromePath })`.
+
+## Kernel mode on stock Chrome
+
+```
+Failed to open browser for "acme-main": Kernel mode needs a fingerprint-chromium binary (engine-level spoof). This executable has no --fingerprint-platform switch, so the only spoof left would be JavaScript hooks, and those hooks are what browserscan and creepjs flag. Set CHROMIUM_PATH to a fingerprint-chromium build, or install the app at ~/.aitofy/browser-profiles/kernel/Chromium.app (macOS), ~/.aitofy/browser-profiles/kernel/chrome (Linux), or %USERPROFILE%\.aitofy\browser-profiles\kernel\chrome.exe (Windows). Builds: https://github.com/adryfish/fingerprint-chromium/releases
+```
+
+Error code `LAUNCH_FAILED`. `engine: "kernel"` was asked for, and the resolved executable is stock
+Chrome. `engine: "auto"` (the default) does not throw: it falls back to JavaScript injection.
+
+Install a fingerprint-chromium build and point at it:
+
+```bash
+CHROMIUM_PATH=/path/to/Chromium.app/Contents/MacOS/Chromium browser-profiles open acme-main --engine kernel
+```
 
 ## Proxy failed
 

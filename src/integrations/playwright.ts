@@ -173,6 +173,7 @@ export async function withPlaywright(options: WithPlaywrightOptions): Promise<Wi
         defaultViewport: options.defaultViewport,
         slowMo: options.slowMo,
         timeout: options.timeout,
+        engine: options.engine,
     });
 
     // Connect Playwright via CDP
@@ -188,12 +189,12 @@ export async function withPlaywright(options: WithPlaywrightOptions): Promise<Wi
             timezoneId: profile.timezone || 'America/New_York',
             viewport: options.defaultViewport || null,
         });
-        await applyProtection(context, profile.fingerprint);
+        if (launch.engine !== 'kernel') await applyProtection(context, profile.fingerprint);
         page = await context.newPage();
     } else {
         const contexts = browser.contexts();
         context = contexts.length > 0 ? contexts[0] : await browser.newContext();
-        await applyProtection(context, profile.fingerprint);
+        if (launch.engine !== 'kernel') await applyProtection(context, profile.fingerprint);
         const pages = context.pages();
         page = pages.length > 0 ? pages[0] : await context.newPage();
     }
@@ -244,6 +245,7 @@ export async function quickLaunchPlaywright(options: QuickLaunchPlaywrightOption
         defaultViewport: options.defaultViewport,
         slowMo: options.slowMo,
         timeout: options.timeout,
+        engine: options.engine,
     });
 
     const browser: PlaywrightBrowser = await playwright.chromium.connectOverCDP(launch.wsEndpoint);
@@ -257,12 +259,12 @@ export async function quickLaunchPlaywright(options: QuickLaunchPlaywrightOption
             timezoneId: options.timezone || 'America/New_York',
             viewport: options.defaultViewport || null,
         });
-        await applyProtection(context, profile.fingerprint);
+        if (launch.engine !== 'kernel') await applyProtection(context, profile.fingerprint);
         page = await context.newPage();
     } else {
         const contexts = browser.contexts();
         context = contexts.length > 0 ? contexts[0] : await browser.newContext();
-        await applyProtection(context, profile.fingerprint);
+        if (launch.engine !== 'kernel') await applyProtection(context, profile.fingerprint);
         const pages = context.pages();
         page = pages.length > 0 ? pages[0] : await context.newPage();
     }

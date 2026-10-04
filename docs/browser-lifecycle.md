@@ -59,8 +59,10 @@ in the library lets Chrome outlive the process that started it. That is the whol
   that does dies with its process. A detached launch with a proxy that has a username fails before
   Chrome starts, with an `INVALID_CONFIG` error, rather than leaving a browser that can never reach
   the network. A proxy without credentials is fine.
-- **First-tab-only injection.** Nothing holds a CDP connection, so no new target can be paused and
-  injected. The first tab is protected; tabs opened later get only the flag-level protections.
+- **First-tab-only injection** on the inject engine. Nothing holds a CDP connection, so no new
+  target can be paused and injected. The first tab is protected; tabs opened later get only the
+  flag-level protections. Kernel mode keeps the spoof on later tabs, because it is a process flag,
+  except the `Intl` locale on macOS.
 - **You close it yourself**, with `browser close` or `browser_close`, from any process.
 
 Use it for one-shot scripts that must exit immediately:

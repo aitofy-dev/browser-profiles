@@ -32,7 +32,10 @@ Precedence, highest first:
 1. `chromePath` — `new BrowserProfiles({ chromePath })` or `LaunchOptions.chromePath`. Used only if
    the file exists.
 2. `CHROMIUM_PATH` or `CHROME_PATH` in the environment, again only if the file exists.
-3. The platform's usual install locations.
+3. A fingerprint-chromium kernel, if the file exists and contains `--fingerprint-platform`:
+   `~/.aitofy/browser-profiles/kernel/` (`Chromium.app` on macOS, `chrome` on Linux, `chrome.exe`
+   on Windows), then `Chromium.app` in `/Applications` or `~/Applications`.
+4. The platform's usual install locations, Google Chrome first.
 
 If none of them resolves, the launch fails with `CHROME_NOT_FOUND`. See
 [troubleshooting.md](./troubleshooting.md).

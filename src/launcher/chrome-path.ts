@@ -5,6 +5,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
+import { binaryLooksLikeKernel } from './kernel';
 
 const MAC_PATHS = [
     '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
@@ -43,15 +44,35 @@ function platformCandidates(): string[] {
     }
 }
 
+/** fingerprint-chromium installs. Used only when the file contains the kernel switch. */
+export function kernelBinaryCandidates(): string[] {
+    const root = path.join(os.homedir(), '.aitofy', 'browser-profiles', 'kernel');
+    const bundled = [
+        path.join(root, 'Chromium.app', 'Contents', 'MacOS', 'Chromium'),
+        path.join(root, 'chrome'),
+        path.join(root, 'chrome.exe'),
+    ];
+    const installed = [
+        '/Applications/Chromium.app/Contents/MacOS/Chromium',
+        path.join(os.homedir(), 'Applications/Chromium.app/Contents/MacOS/Chromium'),
+    ];
+    return [...bundled, ...installed];
+}
+
 /**
  * Resolve the Chrome/Chromium executable.
- * Precedence: explicit path > CHROMIUM_PATH/CHROME_PATH > platform defaults.
+ * Precedence: explicit path > CHROMIUM_PATH/CHROME_PATH > a fingerprint-chromium
+ * kernel > platform defaults (stock Google Chrome).
  */
 export function getChromePath(customPath?: string): string {
     if (customPath && fs.existsSync(customPath)) return customPath;
 
     const envPath = process.env.CHROMIUM_PATH || process.env.CHROME_PATH;
     if (envPath && fs.existsSync(envPath)) return envPath;
+
+    for (const candidate of kernelBinaryCandidates()) {
+        if (fs.existsSync(candidate) && binaryLooksLikeKernel(candidate)) return candidate;
+    }
 
     for (const candidate of platformCandidates()) {
         if (fs.existsSync(candidate)) return candidate;

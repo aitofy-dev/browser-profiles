@@ -142,9 +142,11 @@ profile returns the running browser with `reused=true`. Close it with `browser c
 |------|-------------|
 | `--headless` | Run Chrome without a visible window. Default false (a real window is far less detectable). Set true only on machines with no display. |
 | `--start-url <value>` | Absolute URL to open in the first tab, e.g. `"https://example.com"`. Omit for a blank tab. |
-| `--detached` | Let Chrome outlive the process that opened it. Default false: the opener keeps the browser protected (per-tab fingerprint injection, authenticated proxy relay) and closes it on exit. Set true only for scripts that must exit immediately; then only flag-level protections remain and an authenticated proxy will not work. |
+| `--detached` | Let Chrome outlive the process that opened it. Default false: the opener keeps the browser protected (per-tab fingerprint injection, authenticated proxy relay) and closes it on exit. Set true only for scripts that must exit immediately; then only flag-level protections remain and an authenticated proxy will not work. Kernel mode is the exception: its spoof is in the Chrome flags, so later tabs stay spoofed after the opener exits. |
+| `--engine <auto\|kernel\|inject>` | Where the fingerprint is applied. `kernel` needs a fingerprint-chromium binary and spoofs inside Chromium with no JavaScript hooks. `inject` patches stock Chrome over CDP. `auto` (default) uses kernel when the executable contains `--fingerprint-platform`, otherwise inject. |
 
-Output: `{ profileId, wsEndpoint, port, pid, reused, detached }`.
+Output: `{ profileId, wsEndpoint, port, pid, reused, detached, engine }`. `engine` is `kernel` or
+`inject`.
 
 ## browser launch
 
@@ -158,8 +160,9 @@ when logins or cookies must survive.
 | `--headless` | As in `browser open`. |
 | `--no-random-fingerprint` | The schema defaults `randomFingerprint` to true (generate a random but internally consistent user agent, platform and hardware profile); this flag turns it off so Chrome's own fingerprint is used. |
 | `--detached` | As in `browser open`. |
+| `--engine <auto\|kernel\|inject>` | As in `browser open`. |
 
-Output: `{ profileId, wsEndpoint, port, pid, temporary: true, detached }`. The `profileId` is a
+Output: `{ profileId, wsEndpoint, port, pid, temporary: true, detached, engine }`. The `profileId` is a
 `tmp-...` id.
 
 ## browser close

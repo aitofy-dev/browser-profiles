@@ -149,6 +149,16 @@ export interface FingerprintConfig {
 }
 
 /**
+ * auto: kernel when the executable is fingerprint-chromium, otherwise JavaScript injection.
+ * kernel: engine-level spoof. Refuses to launch on stock Chrome.
+ * inject: JavaScript and CDP overrides, even if the binary is a kernel build.
+ */
+export type FingerprintEngine = 'auto' | 'kernel' | 'inject';
+
+/** The engine a running browser actually launched with. */
+export type ResolvedEngine = 'kernel' | 'inject';
+
+/**
  * Browser profile configuration
  */
 export interface ProfileConfig {
@@ -208,6 +218,11 @@ export interface LaunchOptions {
     timeout?: number;
     /** Let Chrome outlive this Node process (no SIGINT handler, child unref'd) */
     detached?: boolean;
+    /**
+     * Where the fingerprint is applied.
+     * Default `auto`: kernel when the executable has the fingerprint-chromium switch.
+     */
+    engine?: FingerprintEngine;
 }
 
 /**
@@ -242,6 +257,8 @@ export interface LaunchResult {
     reused?: boolean;
     /** True when Chrome outlives this process, so only the first tab is protected */
     detached?: boolean;
+    /** kernel spoofs inside Chromium. inject patches from JavaScript. */
+    engine: ResolvedEngine;
 }
 
 /**

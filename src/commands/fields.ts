@@ -82,5 +82,18 @@ export const detachedField = z
         'Let Chrome outlive the process that opened it. Default false: the opener keeps the browser ' +
         'protected (per-tab fingerprint injection, authenticated proxy relay) and closes it on exit. ' +
         'Set true only for scripts that must exit immediately; then only flag-level protections remain ' +
-        'and an authenticated proxy will not work.'
+        'and an authenticated proxy will not work. Kernel mode is the exception: its spoof is in the ' +
+        'Chrome flags, so later tabs stay spoofed after the opener exits.'
+    );
+
+export const engineField = z
+    .enum(['auto', 'kernel', 'inject'])
+    .optional()
+    .describe(
+        'Where the fingerprint is applied. "kernel" needs a fingerprint-chromium binary and spoofs ' +
+        'canvas, WebGL, audio, fonts and client rects inside Chromium, with no JavaScript hooks. ' +
+        '"inject" patches stock Chrome from JavaScript over CDP. "auto" (default) uses kernel when the ' +
+        'binary has the fingerprint-platform switch, otherwise inject. Install ' +
+        'the kernel at ~/.aitofy/browser-profiles/kernel/ or set CHROMIUM_PATH. ' +
+        'Builds: https://github.com/adryfish/fingerprint-chromium/releases'
     );

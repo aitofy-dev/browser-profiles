@@ -15,6 +15,8 @@ export interface ChromeFlagOptions {
     extensions: string[];
     /** Local relay URL from `startProxyRelay`, never the upstream proxy. */
     proxyServer?: string;
+    /** fingerprint-chromium switches. Empty on the inject engine. */
+    kernelFlags?: string[];
 }
 
 const BASE_FLAGS = [
@@ -58,12 +60,13 @@ function extensionFlags(extensions: string[]): string[] {
 }
 
 export function buildChromeFlags(options: ChromeFlagOptions): string[] {
-    const { profile, userDataDir, headless, args, extensions, proxyServer } = options;
+    const { profile, userDataDir, headless, args, extensions, proxyServer, kernelFlags = [] } = options;
 
     return [
         ...BASE_FLAGS,
         `--lang=${profile.fingerprint?.language || 'en-US'}`,
         ...ANTI_DETECT_FLAGS,
+        ...kernelFlags,
         ...(userDataDir ? [`--user-data-dir=${userDataDir}`] : []),
         ...(headless ? HEADLESS_FLAGS : []),
         ...(proxyServer ? [`--proxy-server=${proxyServer}`] : []),

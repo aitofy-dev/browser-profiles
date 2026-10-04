@@ -68,6 +68,11 @@ export interface StandaloneLaunchOptions {
      * @default false
      */
     detached?: boolean;
+
+    /**
+     * Where the fingerprint is applied. Default auto.
+     */
+    engine?: 'auto' | 'kernel' | 'inject';
 }
 
 /**
@@ -93,6 +98,9 @@ export interface StandaloneLaunchResult {
      * Close function
      */
     close: () => Promise<void>;
+
+    /** kernel spoofs inside Chromium. inject patches from JavaScript. */
+    engine: 'kernel' | 'inject';
 }
 
 /**
@@ -139,6 +147,7 @@ export async function launchChromeStandalone(options: StandaloneLaunchOptions = 
         args = [],
         extensions = [],
         detached = false,
+        engine,
     } = options;
 
     const tempProfile: StoredProfile = {
@@ -171,6 +180,7 @@ export async function launchChromeStandalone(options: StandaloneLaunchOptions = 
         args,
         extensions,
         detached,
+        engine,
     });
 
     const close = async () => {
@@ -193,6 +203,7 @@ export async function launchChromeStandalone(options: StandaloneLaunchOptions = 
         pid: result.pid,
         port: result.port,
         close,
+        engine: result.engine,
     };
 }
 

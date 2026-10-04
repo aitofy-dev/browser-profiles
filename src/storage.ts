@@ -73,6 +73,8 @@ export interface BrowserLockInfo {
     detached?: boolean;
     /** Placeholder written before Chrome starts: nothing is running behind it yet. */
     claiming?: boolean;
+    /** Engine the browser was launched with. Absent on locks written before kernel mode. */
+    engine?: 'kernel' | 'inject';
 }
 
 export function lockFilePath(userDataDir: string): string {
@@ -92,6 +94,7 @@ export function readLockFile(userDataDir: string): BrowserLockInfo | null {
             proxyUrl: parsed.proxyUrl,
             detached: parsed.detached,
             claiming: parsed.claiming,
+            engine: parsed.engine === 'kernel' || parsed.engine === 'inject' ? parsed.engine : undefined,
         };
     } catch {
         return null;
