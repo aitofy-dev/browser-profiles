@@ -160,7 +160,8 @@ export async function launchChromeStandalone(options: StandaloneLaunchOptions = 
         fingerprint: {
             userAgent: fingerprint.userAgent,
             language: fingerprint.language || 'en-US',
-            platform: fingerprint.platform || 'Win32',
+            // Unset lets each engine pick: inject claims Windows, kernel claims this machine.
+            platform: fingerprint.platform,
             hardwareConcurrency: fingerprint.hardwareConcurrency || 8,
             deviceMemory: fingerprint.deviceMemory || 8,
         },

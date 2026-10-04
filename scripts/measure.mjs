@@ -34,7 +34,14 @@ const SITES = [
 const SETTLE_MS = Number(process.env.SETTLE_MS) || 30_000;
 const IPV4 = /\b(?:\d{1,3}\.){3}\d{1,3}\b/g;
 
-const FINGERPRINT = { platform: 'Win32', language: 'en-US', hardwareConcurrency: 8, deviceMemory: 8 };
+// PROFILE_PLATFORM=host leaves the platform unset, so the kernel claims this machine's OS.
+const PLATFORM = process.env.PROFILE_PLATFORM || 'Win32';
+const FINGERPRINT = {
+    ...(PLATFORM === 'host' ? {} : { platform: PLATFORM }),
+    language: 'en-US',
+    hardwareConcurrency: 8,
+    deviceMemory: 8,
+};
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

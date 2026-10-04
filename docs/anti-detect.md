@@ -21,11 +21,12 @@ a new one. Flags passed to the binary:
 | Surface | Flag |
 |---------|------|
 | Seed | `--fingerprint=<seed>` |
-| Platform | `--fingerprint-platform` from `Win32` / `MacIntel` / `Linux x86_64` |
+| Platform | `--fingerprint-platform` from `Win32` / `MacIntel` / `Linux x86_64`. A profile with no platform claims this machine's OS: the CPU shows through, and Windows claimed on Apple Silicon reads as a virtual machine to fingerprint.com. |
+| Display | `--force-color-profile=srgb` when another OS is claimed on a Mac, since only Mac displays report a P3 gamut and HDR. |
 | Brand | `--fingerprint-brand=Chrome`. The brand version is the binary's own, so the UA matches the browser. `fingerprint.userAgent` is ignored and a warning is logged. |
 | CPU cores | `--fingerprint-hardware-concurrency` when the profile sets it. Otherwise the seed decides. |
 | Language | `--lang` and `--accept-lang` |
-| Timezone | `--timezone` plus the `TZ` environment variable |
+| Timezone | `--timezone` plus the `TZ` environment variable. With a proxy and no `timezone`, it comes from the IP the proxy exits from, looked up through the proxy itself. |
 | WebRTC | `--disable-non-proxied-udp` |
 | Canvas, audio | On, unless the profile sets that surface to `real` (`--disable-spoofing`) |
 | WebGL, fonts, client rects, device memory, webdriver | Derived inside the binary from the seed. `fingerprint.webgl` is not applied; current kernels no longer accept a vendor string. |

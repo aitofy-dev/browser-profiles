@@ -133,11 +133,23 @@ export function kernelSeed(profileId: string): number {
     return positive === 0 ? 1 : positive;
 }
 
-export function kernelPlatform(navigatorPlatform: string): 'windows' | 'macos' | 'linux' {
+type KernelPlatform = 'windows' | 'macos' | 'linux';
+
+export function kernelPlatform(navigatorPlatform: string): KernelPlatform {
     const value = navigatorPlatform.toLowerCase();
     if (value.includes('mac')) return 'macos';
     if (value.includes('linux') || value === 'x11') return 'linux';
     return 'windows';
+}
+
+/**
+ * The OS this machine really is. A profile that names no platform claims it: the CPU
+ * shows through (an ARM NaN under a Windows claim reads as a virtual machine).
+ */
+export function hostKernelPlatform(nodePlatform: NodeJS.Platform = process.platform): KernelPlatform {
+    if (nodePlatform === 'darwin') return 'macos';
+    if (nodePlatform === 'win32') return 'windows';
+    return 'linux';
 }
 
 function acceptLanguage(language: string): string {
@@ -158,10 +170,14 @@ function disabledSurfaces(fingerprint: FingerprintConfig | undefined): string[] 
  * matches the binary; a pinned fingerprint.userAgent is not applied.
  * GPU strings are derived from the seed (Chrome 144 removed the vendor flags).
  */
-export function buildKernelFlags(profile: StoredProfile, timezone: string): string[] {
+export function buildKernelFlags(
+    profile: StoredProfile,
+    timezone: string,
+    host: KernelPlatform = hostKernelPlatform()
+): string[] {
     const fingerprint = profile.fingerprint;
     const language = fingerprint?.language || FINGERPRINT_DEFAULTS.language;
-    const platform = kernelPlatform(fingerprint?.platform || FINGERPRINT_DEFAULTS.platform);
+    const platform = fingerprint?.platform ? kernelPlatform(fingerprint.platform) : host;
     const flags = [
         `--fingerprint=${kernelSeed(profile.id)}`,
         `--fingerprint-platform=${platform}`,
@@ -178,6 +194,9 @@ export function buildKernelFlags(profile: StoredProfile, timezone: string): stri
 
     const off = disabledSurfaces(fingerprint);
     if (off.length > 0) flags.push(`--disable-spoofing=${off.join(',')}`);
+
+    // Only Mac displays report a P3 gamut and HDR; another OS claimed on a Mac must not.
+    if (host === 'macos' && platform !== 'macos') flags.push('--force-color-profile=srgb');
 
     return flags;
 }

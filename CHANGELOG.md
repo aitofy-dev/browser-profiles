@@ -14,7 +14,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fingerprint is spoofed inside Chromium from a per-profile seed and no JavaScript hooks are
   installed. `auto` picks it when the binary has the switch.
 
+### Changed
+
+- **Kernel profiles without a platform claim this machine's OS.** Windows claimed on Apple Silicon
+  is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
+  A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
+  Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+- Detector scores in the README now come from `scripts/measure.mjs`, run against AdsPower, GPM
+  Login and Multilogin on the same machine and proxy: see `docs/benchmark.md`. The earlier numbers
+  could not be reproduced.
+
 ### Fixed
+
+- **The timezone came from the proxy's host, not its exit IP.** A gateway proxy exits elsewhere, so
+  the profile could report another country's timezone. It is now looked up through the proxy.
 
 - **`Intl` reported the host locale.** Chrome on macOS ignores `--lang`, so `Intl.DateTimeFormat()`
   showed e.g. `zh-CN` while `navigator.language` said `en-US`. Every tab and worker now gets
@@ -26,12 +39,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   they now replace the getters on `Navigator.prototype`. browserscan no longer reports a bot.
 - **Accept-Language disagreed with `navigator.languages`.** The header was `en-US` while
   `navigator.languages` said `en-US,en`; it is now `en-US,en;q=0.9`, as Chrome sends.
-
-### Changed
-
-- Detector scores in the README now come from `scripts/measure.mjs`, run against AdsPower, GPM
-  Login and Multilogin on the same machine and proxy: see `docs/benchmark.md`. The earlier numbers
-  could not be reproduced.
 
 ## [0.3.0] - 2026-09-12
 
@@ -80,7 +87,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `fingerprint.webgl` instead of being random per page load.
 - Removed the hardcoded `USER_AGENTS` list; the User-Agent is built from the running Chrome.
 
+### Changed
+
+- **Kernel profiles without a platform claim this machine's OS.** Windows claimed on Apple Silicon
+  is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
+  A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
+  Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+
 ### Fixed
+
+- **The timezone came from the proxy's host, not its exit IP.** A gateway proxy exits elsewhere, so
+  the profile could report another country's timezone. It is now looked up through the proxy.
 
 - **User-Agent now matches the running Chrome.** The UA and Client Hints (`Sec-CH-UA`,
   `navigator.userAgentData`) were pinned to Chrome 119-121; current Chrome is 152, and detectors
@@ -164,7 +181,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.9] - 2026-01-12
 
+### Changed
+
+- **Kernel profiles without a platform claim this machine's OS.** Windows claimed on Apple Silicon
+  is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
+  A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
+  Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+
 ### Fixed
+
+- **The timezone came from the proxy's host, not its exit IP.** A gateway proxy exits elsewhere, so
+  the profile could report another country's timezone. It is now looked up through the proxy.
 
 - **Chrome stale lock file cleanup** 🔓
   - Auto-cleans `SingletonLock`, `SingletonCookie`, `SingletonSocket` files before launching
@@ -181,7 +208,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.8] - 2026-01-12
 
+### Changed
+
+- **Kernel profiles without a platform claim this machine's OS.** Windows claimed on Apple Silicon
+  is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
+  A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
+  Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+
 ### Fixed
+
+- **The timezone came from the proxy's host, not its exit IP.** A gateway proxy exits elsewhere, so
+  the profile could report another country's timezone. It is now looked up through the proxy.
 
 - **Connection retry on stale browser** ⚡
   - If puppeteer.connect() fails with ECONNREFUSED, automatically retries with a fresh browser launch
@@ -251,7 +288,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   // Connects to existing browser instead of failing!
   ```
 
+### Changed
+
+- **Kernel profiles without a platform claim this machine's OS.** Windows claimed on Apple Silicon
+  is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
+  A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
+  Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+
 ### Fixed
+
+- **The timezone came from the proxy's host, not its exit IP.** A gateway proxy exits elsewhere, so
+  the profile could report another country's timezone. It is now looked up through the proxy.
 
 - Running multiple scripts with the same profile ID no longer causes "port already in use" errors
 - Stale lock files are automatically cleaned up when browser process has died
@@ -285,7 +332,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.2.4] - 2026-01-12
 
+### Changed
+
+- **Kernel profiles without a platform claim this machine's OS.** Windows claimed on Apple Silicon
+  is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
+  A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
+  Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+
 ### Fixed
+
+- **The timezone came from the proxy's host, not its exit IP.** A gateway proxy exits elsewhere, so
+  the profile could report another country's timezone. It is now looked up through the proxy.
 
 - **Multiple pages issue** - Fixed browser opening with 2 pages instead of 1
   - `withPuppeteer()`, `quickLaunch()`, and `createSession()` now reuse existing browser pages
@@ -418,7 +475,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   });
   ```
 
+### Changed
+
+- **Kernel profiles without a platform claim this machine's OS.** Windows claimed on Apple Silicon
+  is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
+  A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
+  Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+
 ### Fixed
+
+- **The timezone came from the proxy's host, not its exit IP.** A gateway proxy exits elsewhere, so
+  the profile could report another country's timezone. It is now looked up through the proxy.
 
 - **ESM Compatibility** - Package now works correctly in ESM environments (tsx, vite, next.js)
   - Replaced `require()` with dynamic `import()` in `getPuppeteer()`
@@ -439,7 +506,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1] - 2026-01-07
 
+### Changed
+
+- **Kernel profiles without a platform claim this machine's OS.** Windows claimed on Apple Silicon
+  is reported as a virtual machine by fingerprint.com (suspect score 38); macOS claimed scores 8.
+  A profile that sets `fingerprint.platform` is unchanged, and the inject engine still defaults to
+  Windows. When another OS is claimed on a Mac, `--force-color-profile=srgb` hides the P3/HDR display.
+
 ### Fixed
+
+- **The timezone came from the proxy's host, not its exit IP.** A gateway proxy exits elsewhere, so
+  the profile could report another country's timezone. It is now looked up through the proxy.
 - Minor bug fixes and stability improvements
 
 ## [0.1.0] - 2026-01-06

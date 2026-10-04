@@ -25,7 +25,8 @@ the same proxy and the same pages. Measured 2026-10-04 with [`scripts/measure.mj
 
 | Engine | browserscan | Cloudflare challenge | fingerprint.com bot | fingerprint.com tampering | fingerprint.com suspect score | pixelscan | deviceandbrowserinfo | rebrowser |
 |--------|-------------|----------------------|---------------------|---------------------------|-------------------------------|-----------|----------------------|-----------|
-| `kernel` | 100% | passed | not detected | detected | 38 | inconsistent, masking | human | clean |
+| `kernel`, macOS claimed (default on a Mac) | 100% | passed | not detected | detected | 8 | inconsistent, masking | human | not run |
+| `kernel`, Windows claimed | 100% | passed | not detected | detected | 38 | inconsistent, masking | human | clean |
 | AdsPower | 100% | passed | not detected | detected | 30 | consistent | human | clean |
 | GPM Login | 100% | passed | not detected | detected | 16 | did not finish | human | clean |
 | Multilogin | 90% | passed | not detected | detected | 39 | inconsistent | human | clean |
@@ -54,7 +55,11 @@ Sites: [browserscan](https://www.browserscan.net/),
 
 ## Limits of this run
 
-- One run, one machine, one proxy. Scores move between runs and between site versions.
+- One run, one machine, one proxy. Scores move between runs and between site versions. The
+  macOS-claimed `kernel` row was run three times for browserscan and Cloudflare: one run scored 95%
+  ("Anti-detect browser") and was held at the Cloudflare check, the other two are the row above.
+- Claiming Windows on Apple Silicon is what fingerprint.com reports as a virtual machine and a rare
+  device: with macOS claimed, both flags clear and the suspect score drops from 38 to 8.
 - `inject` was measured again after its navigator overrides moved to `Navigator.prototype`: that
   removed the browserscan bot flag and the rebrowser `navigator.webdriver` finding. Its pixelscan and
   deviceandbrowserinfo cells are from the run before.

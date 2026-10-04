@@ -10,6 +10,7 @@ import {
     KERNEL_SWITCH,
     binaryLooksLikeKernel,
     buildKernelFlags,
+    hostKernelPlatform,
     kernelPlatform,
     kernelSeed,
     resolveEngine,
@@ -56,6 +57,12 @@ describe('kernelPlatform', () => {
         expect(kernelPlatform('MacIntel')).toBe('macos');
         expect(kernelPlatform('Linux x86_64')).toBe('linux');
     });
+
+    it('maps the host OS', () => {
+        expect(hostKernelPlatform('darwin')).toBe('macos');
+        expect(hostKernelPlatform('win32')).toBe('windows');
+        expect(hostKernelPlatform('linux')).toBe('linux');
+    });
 });
 
 describe('buildKernelFlags', () => {
@@ -75,12 +82,27 @@ describe('buildKernelFlags', () => {
     it('omits cores and disable-spoofing when the profile leaves them unset', () => {
         const flags = buildKernelFlags(
             { id: 'bare', name: 'Bare', createdAt: 0, updatedAt: 0 },
-            'America/New_York'
+            'America/New_York',
+            'windows'
         );
         expect(flags.some((flag) => flag.startsWith('--fingerprint-hardware-concurrency'))).toBe(false);
         expect(flags.some((flag) => flag.startsWith('--disable-spoofing'))).toBe(false);
         expect(flags).toContain('--fingerprint-platform=windows');
         expect(flags).toContain('--accept-lang=en-US,en');
+    });
+
+    it('claims the host OS when the profile names no platform', () => {
+        const bare = { id: 'bare', name: 'Bare', createdAt: 0, updatedAt: 0 };
+        expect(buildKernelFlags(bare, 'UTC', 'macos')).toContain('--fingerprint-platform=macos');
+        expect(buildKernelFlags(bare, 'UTC', 'linux')).toContain('--fingerprint-platform=linux');
+    });
+
+    it('hides the Mac display gamut only when another OS is claimed on a Mac', () => {
+        const windows = { id: 'w', name: 'W', createdAt: 0, updatedAt: 0, fingerprint: { platform: 'Win32' } };
+        const bare = { id: 'b', name: 'B', createdAt: 0, updatedAt: 0 };
+        expect(buildKernelFlags(windows, 'UTC', 'macos')).toContain('--force-color-profile=srgb');
+        expect(buildKernelFlags(bare, 'UTC', 'macos')).not.toContain('--force-color-profile=srgb');
+        expect(buildKernelFlags(windows, 'UTC', 'windows')).not.toContain('--force-color-profile=srgb');
     });
 
     it('is placed before a caller flag, so the caller can override it', () => {
