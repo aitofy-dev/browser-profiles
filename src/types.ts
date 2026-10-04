@@ -247,6 +247,11 @@ export interface LaunchOptions {
      * A real profile only accepts `auto`; it then launches with no engine.
      */
     engine?: FingerprintEngine;
+    /**
+     * Fixed DevTools port, so a client configured ahead of time (e.g. Playwright MCP
+     * `--cdp-endpoint http://127.0.0.1:<port>`) can reach the browser. Default: a free port.
+     */
+    port?: number;
 }
 
 /**

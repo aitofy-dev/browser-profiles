@@ -19,6 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Real launches keep Chrome's sandbox, Safe Browsing, popup blocking and updates on (no `--no-sandbox`).
 - `browser status` reports each browser's `engine`, and `engine` can now be `real` in launch results
   and lock files. `profile list` shows a Fingerprint column.
+- `port` on `launch` and `browser open` (`--port`, MCP `port`): a fixed DevTools port, so a client
+  configured ahead of time, such as Playwright MCP with `--cdp-endpoint http://127.0.0.1:<port>`,
+  can reach the profile's browser. A browser that is already running keeps its port.
 
 ### Changed
 

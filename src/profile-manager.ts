@@ -371,6 +371,7 @@ export class BrowserProfiles {
             timeout: options?.timeout,
             detached: options?.detached,
             engine: options?.engine,
+            port: options?.port,
         });
 
         log.debug(`Launched profile ${profileId} on port ${result.port}`);

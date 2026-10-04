@@ -100,7 +100,7 @@ Tool names are the command names with `_` instead of the dot: `profile.list` bec
 | `profile_update` | Change fields of an existing profile. Omitted fields are left untouched. | `idOrName`, `name?`, `proxy?` (null removes it), `timezone?`, `fingerprint?`, `language?`, `platform?`, `tags?`, `notes?` |
 | `profile_delete` | Delete a profile and all of its browser data. Irreversible. | `idOrName`, `force?` |
 | `profile_duplicate` | Copy a profile settings (proxy, timezone, fingerprint) into a new profile with a new id. | `idOrName`, `name?` |
-| `browser_open` | Open Chrome with a stored profile and return its CDP wsEndpoint. | `idOrName`, `headless?`, `startUrl?`, `detached?`, `engine?` |
+| `browser_open` | Open Chrome with a stored profile and return its CDP wsEndpoint. | `idOrName`, `headless?`, `startUrl?`, `detached?`, `engine?`, `port?` |
 | `browser_launch` | Launch a throwaway Chrome with a random fingerprint and no saved profile. | `proxy?`, `headless?`, `randomFingerprint?` (default true), `detached?` |
 | `browser_close` | Close the browser running for a profile, from any process. | `idOrName` |
 | `browser_close_all` | Close every browser started from this storage path, including temporary sessions. | none |

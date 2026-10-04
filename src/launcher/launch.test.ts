@@ -11,13 +11,13 @@ import { launchChrome } from './launch';
 // Chrome and its DevTools socket are faked; everything between them is the real launcher.
 const fake = vi.hoisted(() => ({
     port: 0,
-    launches: [] as Array<{ chromeFlags: string[]; envVars?: Record<string, string> }>,
+    launches: [] as Array<{ chromeFlags: string[]; envVars?: Record<string, string>; port?: number }>,
     cdpCalls: [] as string[],
 }));
 
 vi.mock('./deps', () => ({
     loadChromeLauncher: async () => ({
-        launch: async (options: { chromeFlags: string[]; envVars?: Record<string, string> }) => {
+        launch: async (options: { chromeFlags: string[]; envVars?: Record<string, string>; port?: number }) => {
             fake.launches.push(options);
             return { port: fake.port, pid: 2_000_000_000, kill: async () => undefined };
         },
@@ -119,5 +119,15 @@ describe('launchChrome with a generated profile', () => {
             '--webrtc-ip-handling-policy=disable_non_proxied_udp',
         ]));
         expect(fake.cdpCalls).toEqual(expect.arrayContaining(['Browser.getVersion', 'Target.setAutoAttach']));
+    });
+});
+
+describe('launchChrome DevTools port', () => {
+    it('asks Chrome for the fixed port, and for none by default', async () => {
+        launched = await launchChrome({ profile: realProfile, userDataDir: path.join(dir, 'data'), chromePath, port: 9301 });
+        await launched.close();
+        launched = await launch(realProfile);
+
+        expect(fake.launches.map((options) => options.port)).toEqual([9301, undefined]);
     });
 });

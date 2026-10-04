@@ -30,6 +30,18 @@ stay in effect.
 Both MCP servers can be registered at once: one to manage profiles, one to drive pages. The agent
 calls `browser_open`, then starts or reconfigures Playwright MCP with the returned endpoint.
 
+## A fixed port: configure Playwright MCP once
+
+With `--port`, the endpoint is known before the browser starts, so Playwright MCP can sit in an
+MCP config file instead of being started per session:
+
+```bash
+browser-profiles browser open acme-main --port 9301
+npx -y @playwright/mcp@latest --cdp-endpoint http://127.0.0.1:9301
+```
+
+Pick one port per profile. A browser that is already running keeps the port it started with.
+
 ## From code
 
 The same endpoint works with any CDP client.
