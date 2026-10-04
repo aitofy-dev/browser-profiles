@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Kernel engine.** `engine: 'auto' | 'kernel' | 'inject'` on launch, `--engine` in the CLI and
+  MCP. With a [fingerprint-chromium](https://github.com/adryfish/fingerprint-chromium) binary the
+  fingerprint is spoofed inside Chromium from a per-profile seed and no JavaScript hooks are
+  installed. `auto` picks it when the binary has the switch.
+
+### Fixed
+
+- **`Intl` reported the host locale.** Chrome on macOS ignores `--lang`, so `Intl.DateTimeFormat()`
+  showed e.g. `zh-CN` while `navigator.language` said `en-US`. Every tab and worker now gets
+  `Emulation.setLocaleOverride` from `fingerprint.language`.
+- **Module, shared and service workers leaked the real machine** (platform, cores, GPU, and for
+  shared workers the user agent). Every worker target is now paused at start, spoofed and resumed.
+- **Own properties on `navigator` gave the inject engine away.** `webdriver`, `plugins`,
+  `connection` and `getBattery` were defined on the `navigator` object, where real Chrome has none;
+  they now replace the getters on `Navigator.prototype`. browserscan no longer reports a bot.
+- **Accept-Language disagreed with `navigator.languages`.** The header was `en-US` while
+  `navigator.languages` said `en-US,en`; it is now `en-US,en;q=0.9`, as Chrome sends.
+
+### Changed
+
+- Detector scores in the README now come from `scripts/measure.mjs`, run against AdsPower, GPM
+  Login and Multilogin on the same machine and proxy: see `docs/benchmark.md`. The earlier numbers
+  could not be reproduced.
+
 ## [0.3.0] - 2026-09-12
 
 ### Added

@@ -25,3 +25,6 @@ Thumbs.db
 
 # Claude Code worktrees
 .claude/
+
+# Benchmark captures (screenshots can show the host locale)
+measurements/
