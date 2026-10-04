@@ -117,6 +117,7 @@ describe('startAutoAttach', () => {
             'Page.enable',
             'Page.addScriptToEvaluateOnNewDocument',
             'Emulation.setTimezoneOverride',
+            'Emulation.setLocaleOverride',
             'Runtime.evaluate',
             'Target.setAutoAttach',
             'Runtime.runIfWaitingForDebugger',
@@ -171,11 +172,45 @@ describe('startAutoAttach', () => {
         expect(client.methods('s1')).toContain('Runtime.runIfWaitingForDebugger');
     });
 
+    it('spoofs a worker before it is resumed', async () => {
+        const client = new FakeClient();
+        const handle = await start(client);
+
+        client.attach('s1', 'w1', 'shared_worker');
+        await handle.settled();
+
+        expect(client.methods('s1')).toEqual([
+            'Network.setUserAgentOverride',
+            'Runtime.evaluate',
+            'Runtime.runIfWaitingForDebugger',
+        ]);
+        const evaluated = client.sent.find((call) => call.method === 'Runtime.evaluate');
+        expect(evaluated?.params).toEqual({ expression: buildProtectionPlan(profile).workerScript });
+        expect(handle.protectedTargets()).toEqual(['w1']);
+    });
+
+    it('gives a kernel page only the locale override, and leaves its workers alone', async () => {
+        const client = new FakeClient();
+        const plan = buildProtectionPlan(profile, 'Europe/Paris', { major: 152, full: '152.0.0.0' }, 'kernel');
+        const handle = await startAutoAttach({ client, plan, log });
+
+        client.attach('s1', 't1');
+        client.attach('s2', 'w1', 'worker');
+        await handle.settled();
+
+        expect(client.methods('s1')).toEqual([
+            'Emulation.setLocaleOverride',
+            'Target.setAutoAttach',
+            'Runtime.runIfWaitingForDebugger',
+        ]);
+        expect(client.methods('s2')).toEqual(['Runtime.runIfWaitingForDebugger']);
+    });
+
     it('resumes targets it does not protect', async () => {
         const client = new FakeClient();
         const handle = await start(client);
 
-        client.attach('s1', 't1', 'service_worker');
+        client.attach('s1', 't1', 'other');
         await handle.settled();
 
         expect(client.methods('s1')).toEqual(['Runtime.runIfWaitingForDebugger']);

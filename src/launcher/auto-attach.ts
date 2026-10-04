@@ -4,7 +4,7 @@
 
 import type { Logger } from '../log';
 import type { CdpClient, CdpParams } from './deps';
-import { applyProtections, sessionOf } from './protections';
+import { applyProtections, applyWorkerProtections, sessionOf } from './protections';
 import type { ProtectionPlan } from './protections';
 
 /** Pausing new targets is what lets us inject before their first script runs. */
@@ -15,6 +15,7 @@ const AUTO_ATTACH_PARAMS: CdpParams = {
 };
 
 const PROTECTED_TYPES = new Set(['page', 'iframe']);
+const WORKER_TYPES = new Set(['worker', 'shared_worker', 'service_worker']);
 
 interface AttachedTarget {
     sessionId: string;
@@ -65,15 +66,24 @@ export async function startAutoAttach(options: AutoAttachOptions): Promise<AutoA
     const protect = async (target: AttachedTarget): Promise<void> => {
         let patched: Promise<unknown> = Promise.resolve();
         try {
-            if (stopped || !PROTECTED_TYPES.has(target.type) || isProtected(target.targetId)) return;
-            sessions.set(target.sessionId, target.targetId);
+            if (stopped || isProtected(target.targetId)) return;
             const session = sessionOf(client, target.sessionId);
+            if (WORKER_TYPES.has(target.type)) {
+                sessions.set(target.sessionId, target.targetId);
+                await applyWorkerProtections(session, plan);
+                log.debug(`Protected ${target.type} target ${target.targetId}`);
+                return;
+            }
+            if (!PROTECTED_TYPES.has(target.type)) return;
+            sessions.set(target.sessionId, target.targetId);
             await applyProtections(session, plan);
             // A popup's first document is already committed when we attach, so the
             // new-document script above would only reach its next navigation. This patches
             // the document that exists now; it is only awaited after the resume below,
             // because evaluating needs the renderer thread the pause is holding.
-            patched = session.send('Runtime.evaluate', { expression: plan.initScript }).catch(() => undefined);
+            if (plan.initScript) {
+                patched = session.send('Runtime.evaluate', { expression: plan.initScript }).catch(() => undefined);
+            }
             if (target.type === 'page') {
                 // Out-of-process iframes are only reported to a session that asks for them.
                 await client.send('Target.setAutoAttach', AUTO_ATTACH_PARAMS, target.sessionId);

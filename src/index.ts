@@ -118,6 +118,8 @@ export type {
     // Launch types
     LaunchOptions,
     LaunchResult,
+    FingerprintEngine,
+    ResolvedEngine,
 
     // Proxy & Cookie types
     ProxyConfig,

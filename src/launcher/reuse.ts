@@ -60,5 +60,6 @@ export async function reuseExisting(
         close,
         reused: true,
         detached: lock.detached,
+        engine: lock.engine === 'kernel' ? 'kernel' : 'inject',
     };
 }

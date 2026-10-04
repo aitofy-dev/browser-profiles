@@ -23,14 +23,7 @@ Like **n8n** for automation or **Affine** for notes, this is **AdsPower for deve
 | Vendor lock-in | **Open source** (MIT) |
 | No customization | **Full control** |
 
-| Site | Score |
-|------|-------|
-| browserleaks.com | 100% |
-| pixelscan.net | 100% |
-| browserscan.net | 95% |
-| creepjs | 85% |
-
-95% is the Puppeteer ceiling; 100% needs a modified Chromium. What is protected, how it is injected, and the honest limits: [docs/anti-detect.md](./docs/anti-detect.md).
+Kernel mode drives fingerprint-chromium, which spoofs inside Chromium and installs no JavaScript hooks. It scores 100% on browserscan and passes a Cloudflare challenge, next to AdsPower, GPM Login and Multilogin on the same machine and proxy; none of them, paid or not, hides from fingerprint.com. Every number and how to reproduce it: [docs/benchmark.md](./docs/benchmark.md). What is protected, how each engine applies it, and the honest limits: [docs/anti-detect.md](./docs/anti-detect.md).
 
 ## Quick start
 

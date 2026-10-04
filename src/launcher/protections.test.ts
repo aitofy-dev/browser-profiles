@@ -68,7 +68,7 @@ describe('buildProtectionPlan', () => {
         expect(plan.userAgentOverride).toMatchObject({
             userAgent: 'UA/1.0',
             platform: 'MacIntel',
-            acceptLanguage: 'fr-FR',
+            acceptLanguage: 'fr-FR,fr',
         });
         const metadata = plan.userAgentOverride.userAgentMetadata as { platform: string };
         expect(metadata.platform).toBe('macOS');
@@ -112,8 +112,21 @@ describe('buildProtectionPlan', () => {
     });
 });
 
+describe('kernel protection plan', () => {
+    it('installs no script and overrides only the locale', async () => {
+        const plan = buildProtectionPlan(profile, 'Europe/Paris', { major: 152, full: '152.0.0.0' }, 'kernel');
+        expect(plan.engine).toBe('kernel');
+        expect(plan.initScript).toBe('');
+        expect(plan.userAgentMismatch).toBeNull();
+
+        const session = fakeSession();
+        await applyProtections(session, plan);
+        expect(session.calls).toEqual([{ method: 'Emulation.setLocaleOverride', params: { locale: 'fr-FR' } }]);
+    });
+});
+
 describe('applyProtections', () => {
-    it('sends user agent, script and timezone in order', async () => {
+    it('sends user agent, script, timezone and locale in order', async () => {
         const session = fakeSession();
         const plan = buildProtectionPlan(profile);
 
@@ -125,10 +138,12 @@ describe('applyProtections', () => {
             'Page.enable',
             'Page.addScriptToEvaluateOnNewDocument',
             'Emulation.setTimezoneOverride',
+            'Emulation.setLocaleOverride',
         ]);
         expect(session.calls[1].params).toEqual(plan.userAgentOverride);
         expect(session.calls[3].params).toEqual({ source: plan.initScript });
         expect(session.calls[4].params).toEqual({ timezoneId: 'Europe/Paris' });
+        expect(session.calls[5].params).toEqual({ locale: 'fr-FR' });
     });
 
     it('propagates a failure of a protection that matters', async () => {

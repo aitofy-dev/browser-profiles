@@ -14,6 +14,7 @@ This file is the whole story in one page. The same material, split up, lives nex
   docs/playwright-mcp.md      Hand a wsEndpoint to Playwright MCP or any CDP client.
   docs/configuration.md       Storage path precedence, Chrome path, logging, on-disk layout.
   docs/anti-detect.md         What is protected, per-tab injection, scores, honest limits.
+  docs/benchmark.md           Measured scores next to AdsPower, GPM Login and Multilogin, and how to rerun them.
   docs/browser-lifecycle.md   Who owns the browser, reuse, cross-process close, detached trade-offs.
   docs/troubleshooting.md     Common failures with their exact message and the fix.
   docs/adr/0001-command-registry.md  Why one registry generates the CLI, the MCP server and the library API.
@@ -23,16 +24,20 @@ This file is the whole story in one page. The same material, split up, lives nex
 ## What it does
 
 Stores browser profiles locally (proxy, timezone, fingerprint, cookies, Chrome user data) and
-launches real Chrome with anti-detect injections applied over CDP: WebRTC, Canvas, WebGL, Audio,
-navigator, workers, timezone. The user agent and Client Hints are built from the major version of
-the Chrome that is actually running, read with Browser.getVersion at launch; a pinned
-fingerprint.userAgent wins and logs a warning when its major differs. The WebGL vendor/renderer is
-picked once per profile, consistent with its platform, and stored in fingerprint.webgl. Worker and
-SharedWorker run the same spoof as the main thread. Authenticated proxies are handled by a local
-relay. Profiles persist between runs, so logins survive.
+launches real Chrome with anti-detect. engine=auto (the default) uses kernel mode when the
+executable is fingerprint-chromium (engine-level spoof from a per-profile seed, no JavaScript
+hooks) and JavaScript injection over CDP otherwise. Inject mode covers
+WebRTC, Canvas, WebGL, Audio, navigator, workers, timezone, Intl locale. The user agent and Client Hints are
+built from the major version of the Chrome that is actually running, read with Browser.getVersion
+at launch; a pinned fingerprint.userAgent wins and logs a warning when its major differs. Kernel
+mode ignores a pinned user agent so the UA stays the binary's own version. The WebGL
+vendor/renderer is picked once per profile, consistent with its platform, and stored in
+fingerprint.webgl (inject mode; the kernel derives the GPU from the seed). Every worker target
+(dedicated, module, shared, service) runs the same spoof as the main thread. Authenticated proxies are handled by a local relay.
+Profiles persist between runs, so logins survive.
 
-Anti-detect scores: browserleaks.com 100%, pixelscan.net 100%, browserscan.net 95%, creepjs 85%.
-95% is the ceiling for Puppeteer/Playwright; 100% needs a modified Chromium.
+Benchmark (docs/benchmark.md, scripts/measure.mjs): kernel mode scores 100% on browserscan and passes
+a Cloudflare challenge, like AdsPower; inject mode scores 85% and creepjs flags its hooks.
 
 ## Installation
 
@@ -182,8 +187,9 @@ injections live there.
   exits. In a script, background it with a stdin that stays open, or read the endpoint from
   browser_status instead.
 - detached opts out: CLI --detached, MCP detached: true, library profiles.launch(id, {detached: true}).
-  Chrome outlives the caller but with flag-level protection only, no authenticated-proxy relay,
-  injections on the first tab only. Use for one-shot scripts: browser-profiles open acme --detached --json.
+  Chrome outlives the caller. Inject mode keeps flag-level protection only, no authenticated-proxy
+  relay, injections on the first tab only. Kernel mode keeps the spoof (it is a process flag); the
+  relay limit is the same. Use for one-shot scripts: browser-profiles open acme --detached --json.
 - browser_close / browser close works from any process by reading the profile lock file.
 
 ## Library API

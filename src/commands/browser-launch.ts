@@ -6,7 +6,7 @@ import { generateFingerprint } from '../fingerprint';
 import { defineCommand } from './define';
 import { launchErrorCode } from './browser-open';
 import { newTempProfileId, tempSessionDir } from './browser-runtime';
-import { detachedField, headlessField, optionalProxyUrlField } from './fields';
+import { detachedField, engineField, headlessField, optionalProxyUrlField } from './fields';
 import { parseProxyUrl } from './proxy-url';
 
 export interface BrowserLaunched {
@@ -17,6 +17,8 @@ export interface BrowserLaunched {
     temporary: true;
     /** True when Chrome was started to outlive the opener (reduced protection). */
     detached: boolean;
+    /** kernel spoofs inside Chromium. inject patches from JavaScript. */
+    engine: 'kernel' | 'inject';
 }
 
 export const browserLaunch = defineCommand({
@@ -37,6 +39,7 @@ export const browserLaunch = defineCommand({
                 'Default true. Set false to use Chrome own fingerprint.'
             ),
         detached: detachedField,
+        engine: engineField,
     }),
     async run(ctx, input): Promise<Result<BrowserLaunched>> {
         let proxy: ProxyConfig | undefined;
@@ -56,6 +59,7 @@ export const browserLaunch = defineCommand({
                 headless: input.headless ?? false,
                 proxy,
                 detached: input.detached ?? false,
+                engine: input.engine,
                 fingerprint: fingerprint && {
                     userAgent: fingerprint.userAgent,
                     language: fingerprint.language,
@@ -73,6 +77,7 @@ export const browserLaunch = defineCommand({
                 pid: result.pid,
                 temporary: true,
                 detached: input.detached ?? false,
+                engine: result.engine,
             });
         } catch (thrown) {
             const cause = thrown instanceof Error ? thrown : new Error(String(thrown));
@@ -90,6 +95,7 @@ export const browserLaunch = defineCommand({
             `  wsEndpoint: ${output.wsEndpoint}`,
             `  port:       ${output.port}`,
             `  pid:        ${output.pid}`,
+            `  engine:     ${output.engine}`,
             '',
             `Close with: browser-profiles browser close ${output.profileId}`,
             '',

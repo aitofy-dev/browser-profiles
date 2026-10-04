@@ -272,6 +272,7 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         defaultViewport: options.defaultViewport,
         slowMo: options.slowMo,
         timeout: options.timeout,
+        engine: options.engine,
     });
 
     // Connect Puppeteer to the launched browser
@@ -281,38 +282,34 @@ export async function withPuppeteer(options: WithPuppeteerOptions): Promise<With
         slowMo: options.slowMo,
     });
 
-    // Inject the full anti-detect bundle via Puppeteer's native API.
-    // CDP script injection is per-session, so scripts installed by the launcher
-    // on its own CDP client do NOT reach pages driven by this Puppeteer
-    // connection. Re-injecting here is what actually protects the page.
-    const bundle = getProfileProtectionScripts(profile.fingerprint);
-    const injectProtectionScripts = async (page: PuppeteerPage) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        await (page as any).evaluateOnNewDocument(bundle);
-    };
-
-    // Listen for new pages and inject scripts (like puppeteer-extra-stealth's onPageCreated)
-    browser.on('targetcreated', async (target: any) => {
-        if (target.type() === 'page') {
-            try {
-                const newPage = await target.page();
-                if (newPage) {
-                    await injectProtectionScripts(newPage);
-                }
-            } catch {
-                // Ignore errors for pages that can't be accessed
-            }
-        }
-    });
-
-    // Reuse existing page or create new one if needed
-    // This prevents duplicate empty pages from appearing
+    // Reuse existing page or create new one if needed.
+    // This prevents duplicate empty pages from appearing.
     const pages = await browser.pages();
     const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
-    // Inject scripts into the page
-    await injectProtectionScripts(page);
-    // Note: evaluateOnNewDocument scripts will run on first user navigation
+    // CDP script injection is per-session, so scripts installed by the launcher
+    // on its own CDP client do NOT reach pages driven by this Puppeteer
+    // connection. Re-injecting here is what actually protects an inject-mode page.
+    // Kernel mode already spoofed inside Chromium; a hook here is the tell.
+    if (launch.engine !== 'kernel') {
+        const bundle = getProfileProtectionScripts(profile.fingerprint);
+        const injectProtectionScripts = async (targetPage: PuppeteerPage) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            await (targetPage as any).evaluateOnNewDocument(bundle);
+        };
+
+        browser.on('targetcreated', async (target: any) => {
+            if (target.type() === 'page') {
+                try {
+                    const newPage = await target.page();
+                    if (newPage) await injectProtectionScripts(newPage);
+                } catch {
+                    // Ignore errors for pages that can't be accessed
+                }
+            }
+        });
+        await injectProtectionScripts(page);
+    }
 
     // Close function - by default only closes this session's page
     const close = async (options?: CloseOptions) => {
@@ -389,6 +386,7 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
         defaultViewport: options.defaultViewport,
         slowMo: options.slowMo,
         timeout: options.timeout,
+        engine: options.engine,
     });
 
     // Connect Puppeteer to the launched browser
@@ -402,10 +400,10 @@ export async function quickLaunch(options: QuickLaunchOptions = {}): Promise<Wit
     const pages = await browser.pages();
     const page = pages.length > 0 ? pages[0] : await browser.newPage();
 
-    // Inject the full anti-detect bundle (navigator, WebGL, workers, WebRTC,
-    // automation bypass) via Puppeteer's native API.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (page as any).evaluateOnNewDocument(getProfileProtectionScripts(profile.fingerprint));
+    if (launch.engine !== 'kernel') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (page as any).evaluateOnNewDocument(getProfileProtectionScripts(profile.fingerprint));
+    }
 
     // Close function - by default only closes this session's page
     const close = async (closeOptions?: CloseOptions) => {

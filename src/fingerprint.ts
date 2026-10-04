@@ -419,6 +419,11 @@ export function createNavigatorScript(config: {
     replaceGetter('languages', [spoofedProps.language, spoofedProps.language.split('-')[0]]);
   }
   
+  if (spoofedProps.userAgent) {
+    replaceGetter('userAgent', spoofedProps.userAgent);
+    replaceGetter('appVersion', spoofedProps.userAgent.replace('Mozilla/', ''));
+  }
+
   if (spoofedProps.platform) {
     replaceGetter('platform', spoofedProps.platform);
   }
@@ -504,13 +509,27 @@ export function getProfileProtectionScripts(fingerprint?: FingerprintConfig): st
     webgl: fingerprint?.webgl ?? true,
     audio: true,
     workers: true,
-    navigator: {
-      language: fingerprint?.language || FINGERPRINT_DEFAULTS.language,
-      platform: fingerprint?.platform || FINGERPRINT_DEFAULTS.platform,
-      hardwareConcurrency: fingerprint?.hardwareConcurrency || FINGERPRINT_DEFAULTS.hardwareConcurrency,
-      deviceMemory: fingerprint?.deviceMemory || FINGERPRINT_DEFAULTS.deviceMemory,
-    },
+    navigator: profileNavigator(fingerprint),
   });
+}
+
+/**
+ * The navigator/WebGL spoof for a worker target, evaluated over CDP before the
+ * worker's own script runs. Shared and service workers keep the real UA string
+ * whatever CDP overrides, so `userAgent` is set from JavaScript too.
+ */
+export function getProfileWorkerScript(fingerprint: FingerprintConfig | undefined, userAgent: string): string {
+  const navigatorScript = createNavigatorScript({ ...profileNavigator(fingerprint), userAgent });
+  return [navigatorScript, createWebGLScript(fingerprint?.webgl)].join('\n\n');
+}
+
+function profileNavigator(fingerprint?: FingerprintConfig) {
+  return {
+    language: fingerprint?.language || FINGERPRINT_DEFAULTS.language,
+    platform: fingerprint?.platform || FINGERPRINT_DEFAULTS.platform,
+    hardwareConcurrency: fingerprint?.hardwareConcurrency || FINGERPRINT_DEFAULTS.hardwareConcurrency,
+    deviceMemory: fingerprint?.deviceMemory || FINGERPRINT_DEFAULTS.deviceMemory,
+  };
 }
 
 /**
@@ -577,17 +596,16 @@ export const AUTOMATION_BYPASS_SCRIPT = `
   });
   
   // ===== WEBDRIVER REMOVAL =====
-  // Remove webdriver flag
-  Object.defineProperty(navigator, 'webdriver', {
-    get: () => false, // Return false instead of undefined (more natural)
-    configurable: true
-  });
-  
-  // Remove automation-related properties from navigator prototype
-  try {
-    delete Object.getPrototypeOf(navigator).webdriver;
-  } catch {}
-  
+  // Real Chrome keeps webdriver on Navigator.prototype and no own property on navigator;
+  // detectors check both, so only the prototype getter is replaced, and only when it says true.
+  if (navigator.webdriver) {
+    Object.defineProperty(Object.getPrototypeOf(navigator), 'webdriver', {
+      get: () => false,
+      configurable: true,
+      enumerable: true
+    });
+  }
+
   // ===== CHROME OBJECT FIX =====
   if (!window.chrome) {
     window.chrome = {};
@@ -686,13 +704,16 @@ export const AUTOMATION_BYPASS_SCRIPT = `
   fakePlugins.namedItem = (name) => fakePlugins.find(p => p.name === name);
   fakePlugins.refresh = () => {};
   
-  Object.defineProperty(navigator, 'plugins', {
+  // Overrides live on Navigator.prototype: real Chrome has no own properties on navigator.
+  Object.defineProperty(Object.getPrototypeOf(navigator), 'plugins', {
     get: () => fakePlugins,
-    configurable: true
+    configurable: true,
+    enumerable: true
   });
   
   // ===== CONNECTION API =====
-  Object.defineProperty(navigator, 'connection', {
+  Object.defineProperty(Object.getPrototypeOf(navigator), 'connection', {
+    enumerable: true,
     get: () => ({
       effectiveType: '4g',
       rtt: 50,
@@ -705,15 +726,20 @@ export const AUTOMATION_BYPASS_SCRIPT = `
   });
   
   // ===== BATTERY API =====
-  navigator.getBattery = () => Promise.resolve({
-    charging: true,
-    chargingTime: 0,
-    dischargingTime: Infinity,
-    level: 0.95 + Math.random() * 0.05, // Slight variation
-    onchargingchange: null,
-    onchargingtimechange: null,
-    ondischargingtimechange: null,
-    onlevelchange: null
+  Object.defineProperty(Object.getPrototypeOf(navigator), 'getBattery', {
+    value: () => Promise.resolve({
+      charging: true,
+      chargingTime: 0,
+      dischargingTime: Infinity,
+      level: 0.95 + Math.random() * 0.05, // Slight variation
+      onchargingchange: null,
+      onchargingtimechange: null,
+      ondischargingtimechange: null,
+      onlevelchange: null
+    }),
+    configurable: true,
+    enumerable: true,
+    writable: true
   });
   
   // ===== MEDIA DEVICES =====
