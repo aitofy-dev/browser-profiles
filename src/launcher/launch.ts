@@ -143,6 +143,7 @@ async function launchClaimed(options: ChromeLaunchOptions, userDataDir: string):
         args = [],
         extensions = [],
         detached = false,
+        port,
     } = options;
 
     // Safe here only because the claim above proved no browser of ours is running.
@@ -186,6 +187,7 @@ async function launchClaimed(options: ChromeLaunchOptions, userDataDir: string):
                 kernelFlags: identity.engine === 'kernel' ? buildKernelFlags(profile, identity.timezone) : undefined,
             }),
             ...(startingUrl ? { startingUrl } : {}),
+            ...(port ? { port } : {}),
             userDataDir,
             ignoreDefaultFlags: true,
             // Our own SIGINT handlers must run: chrome-launcher's kills and exits first.

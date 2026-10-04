@@ -126,6 +126,7 @@ interface LaunchOptions {
   timeout?: number;
   detached?: boolean;              // let Chrome outlive this process (reduced protection)
   engine?: 'auto' | 'kernel' | 'inject';  // default auto; a real profile accepts only auto
+  port?: number;                   // fixed DevTools port; default a free one
 }
 ```
 

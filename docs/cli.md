@@ -149,6 +149,7 @@ profile returns the running browser with `reused=true`. Close it with `browser c
 | `--headless` | Run Chrome without a visible window. Default false (a real window is far less detectable). Set true only on machines with no display. |
 | `--start-url <value>` | Absolute URL to open in the first tab, e.g. `"https://example.com"`. Omit for a blank tab. |
 | `--detached` | Let Chrome outlive the process that opened it. Default false: the opener keeps the browser protected (per-tab fingerprint injection, authenticated proxy relay) and closes it on exit. Set true only for scripts that must exit immediately; then only flag-level protections remain and an authenticated proxy will not work. Kernel mode is the exception: its spoof is in the Chrome flags, so later tabs stay spoofed after the opener exits. |
+| `--port <value>` | Fixed DevTools port, e.g. `9301`, so a client configured ahead of time can connect to `http://127.0.0.1:<port>` (Playwright MCP `--cdp-endpoint`). Omit for a free port. A browser that is already running keeps its port. |
 | `--engine <auto\|kernel\|inject>` | Where the fingerprint is applied. `kernel` needs a fingerprint-chromium binary and spoofs inside Chromium with no JavaScript hooks. `inject` patches stock Chrome over CDP. `auto` (default) uses kernel when the executable contains `--fingerprint-platform`, otherwise inject. A real profile only accepts `auto`; `kernel` or `inject` fails with `INVALID_CONFIG`. |
 
 Output: `{ profileId, wsEndpoint, port, pid, reused, detached, engine }`. `engine` is `kernel`,

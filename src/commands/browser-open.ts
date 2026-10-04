@@ -49,6 +49,16 @@ export const browserOpen = defineCommand({
             .describe('Absolute URL to open in the first tab, e.g. "https://example.com". Omit for a blank tab.'),
         detached: detachedField,
         engine: engineField,
+        port: z
+            .number()
+            .int()
+            .min(1024)
+            .max(65535)
+            .optional()
+            .describe(
+                'Fixed DevTools port, e.g. 9301, so a client set up ahead of time can connect to ' +
+                'http://127.0.0.1:<port>. Omit for a free port. A browser that is already running keeps its port.'
+            ),
     }),
     async run(ctx, input): Promise<Result<BrowserOpened>> {
         const found = await resolveProfile(ctx, input.idOrName);
@@ -60,6 +70,7 @@ export const browserOpen = defineCommand({
                 headless: input.headless ?? false,
                 detached: input.detached ?? false,
                 engine: input.engine,
+                port: input.port,
                 args: input.startUrl ? [input.startUrl] : [],
             });
 
